@@ -1,5 +1,24 @@
-1. When taskType = 'PICKUP' and customer is not returning the product, can we consider destinationDetails as store coordinates? 
+const splitPathIntoSegments = (path: google.maps.LatLng[]): google.maps.LatLng[][] => {
+  const OFFSET = 2; // Overlap between segments
+  const PAGE_SIZE = 100; // Maximum size of a segment
 
-2. When taskType = 'PICKUP' and the customer returns the product, can we consider the sourceDetails like customer coordinates and destinationdetails as store coordinates 
+  // If path is smaller than PAGE_SIZE, return as a single segment
+  if (path.length <= PAGE_SIZE) {
+    return [path]; // Return the entire path as one segment
+  }
 
-3. Can we consider destination when the taskType is 'DELIVERY' and the consumer does not return the product?Details such as delivery dropoff coordinates and source.Details in store coordinates
+  const result: google.maps.LatLng[][] = []; // Array to store the segments
+  const numberOfSegments = Math.floor((path.length + OFFSET) / PAGE_SIZE) + 1;
+
+  let startIndex = 0;
+  let endIndex = PAGE_SIZE;
+
+  // Divide path into segments
+  for (let i = 0; i < numberOfSegments; i++) {
+    result.push(path.slice(startIndex, endIndex)); // Add the segment
+    startIndex = endIndex - OFFSET; // Overlap between segments
+    endIndex = startIndex + PAGE_SIZE; // Set the next segment's end index
+  }
+
+  return result; // Return all segments
+};
