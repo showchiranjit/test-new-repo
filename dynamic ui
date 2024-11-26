@@ -1,0 +1,168 @@
+import "./App.css";
+import { useState } from "react";
+
+function App() {
+  // config.js
+  // config.js
+  const formConfig = [
+    {
+      label: "App OS",
+      type: "input",
+      placeholder: "Enter App OS",
+      name: "appOS",
+      required: true, // Mark as required
+    },
+    {
+      label: "App Version",
+      type: "input",
+      placeholder: "Enter App Version",
+      name: "appVersion",
+      required: false, // Mark as required
+    },
+    {
+      label: "Error displayed on app",
+      type: "input",
+      placeholder: "Enter Error",
+      name: "error",
+      required: true, // Mark as required
+    },
+    {
+      label: "Additional Info",
+      type: "textarea",
+      placeholder: "Please document as in detail as possible",
+      name: "additionalInfo",
+      required: true, // Mark as required
+    },
+    {
+      label: "Escalate",
+      type: "button",
+      action: "escalate",
+    },
+  ];
+
+  const [formData, setFormData] = useState(
+    formConfig.reduce((acc, field) => {
+      acc[field.name] = ""; // Initialize all fields to empty
+      return acc;
+    }, {})
+  );
+
+  const [errors, setErrors] = useState({});
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const validate = () => {
+    const newErrors = {};
+    formConfig.forEach((field) => {
+      if (field.required && !formData[field.name]) {
+        newErrors[field.name] = `${field.label} is required`;
+      }
+    });
+    return newErrors;
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+    } else {
+      setErrors({});
+      alert(JSON.stringify(formData, null, 2)); // Display the form data
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="p-4 space-y-4 w-2/3">
+      <div className="flex space-x-4">
+        {formConfig.slice(0, 2).map((field, index) => {
+          if (field.type === "input") {
+            return (
+              <div key={index} className="flex flex-col w-1/2">
+                <label className="mb-1 text-sm font-medium">
+                  {field.label}
+                </label>
+                <input
+                  type="text"
+                  name={field.name}
+                  placeholder={field.placeholder}
+                  value={formData[field.name]}
+                  onChange={handleChange}
+                  className={`border ${
+                    errors[field.name] ? "border-red-500" : "border-gray-300"
+                  } rounded p-2 w-full`}
+                />
+                {errors[field.name] && (
+                  <span className="text-red-500 text-sm">
+                    {errors[field.name]}
+                  </span>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })}
+      </div>
+
+      {formConfig.slice(2).map((field, index) => {
+        if (field.type === "input") {
+          return (
+            <div key={index} className="flex flex-col w-1/2">
+              <label className="mb-1 text-sm font-medium">{field.label}</label>
+              <input
+                type="text"
+                name={field.name}
+                placeholder={field.placeholder}
+                value={formData[field.name]}
+                onChange={handleChange}
+                className={`border ${
+                  errors[field.name] ? "border-red-500" : "border-gray-300"
+                } rounded p-2 w-full`}
+              />
+              {errors[field.name] && (
+                <span className="text-red-500 text-sm">
+                  {errors[field.name]}
+                </span>
+              )}
+            </div>
+          );
+        } else if (field.type === "textarea") {
+          return (
+            <div key={index} className="flex flex-col w-full">
+              <label className="mb-1 text-sm font-medium">{field.label}</label>
+              <textarea
+                name={field.name}
+                placeholder={field.placeholder}
+                value={formData[field.name]}
+                onChange={handleChange}
+                className={`border ${
+                  errors[field.name] ? "border-red-500" : "border-gray-300"
+                } rounded p-2 w-full h-24`}
+              />
+              {errors[field.name] && (
+                <span className="text-red-500 text-sm">
+                  {errors[field.name]}
+                </span>
+              )}
+            </div>
+          );
+        } else if (field.type === "button") {
+          return (
+            <button
+              key={index}
+              type="submit"
+              className="bg-blue-500 text-white rounded p-2"
+            >
+              {field.label}
+            </button>
+          );
+        }
+        return null;
+      })}
+    </form>
+  );
+}
+export default App;
