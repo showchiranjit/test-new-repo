@@ -41,3 +41,64 @@ if (currentStop) {
         }
     }
 }
+
+
+
+
+
+function getLocations(stops: Stop[], selectedTaskId: number): Locations {
+    // Filter Stops based on selectedTaskId and ensure type is either STORE or CUSTOMER
+    const filteredStops = stops.filter(stop =>
+        stop.activities.some(activity =>
+            activity.taskIds.some(taskId => taskId.id === selectedTaskId)
+        ) && (stop.type === "STORE" || stop.type === "CUSTOMER")
+    );
+
+    // Determine Current Stop
+    const currentStop = filteredStops.find(
+        stop => stop.status === "ENROUTE" || stop.status === "ARRIVED"
+    );
+
+    // Initialize locations object to hold results
+    const locations: Locations = {
+        storeLocation: null,
+        customerLocation: null,
+        currentStop: currentStop ? currentStop.location.latLong : null
+    };
+
+    // Painting Conditions
+    if (currentStop) {
+        const hasPickupActivity = currentStop.activities.some(activity =>
+            (activity.status === "ENROUTE" || activity.status === "ARRIVED") && activity.type === "PICKUP"
+        );
+
+        const hasDropoffActivity = currentStop.activities.some(
+            activity => activity.status === "DROPOFF"
+        );
+
+        // Paint Store or Customer based on currentStop type
+        if (hasPickupActivity) {
+            if (currentStop.type === "STORE") {
+                locations.storeLocation = currentStop.location.latLong;
+            } else if (currentStop.type === "CUSTOMER") {
+                locations.customerLocation = currentStop.location.latLong;
+            }
+        }
+
+        // Paint Both if there's a dropoff activity
+        if (hasDropoffActivity) {
+            const storeStop = filteredStops.find(stop => stop.type === "STORE");
+            const customerStop = filteredStops.find(stop => stop.type === "CUSTOMER");
+
+            if (storeStop) {
+                locations.storeLocation = storeStop.location.latLong;
+            }
+            if (customerStop) {
+                locations.customerLocation = customerStop.location.latLong;
+            }
+        }
+    }
+
+    // Return the locations object
+    return locations;
+}
