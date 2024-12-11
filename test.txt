@@ -1,39 +1,43 @@
 const filteredStops = stops.filter(stop =>
     stop.activities.some(activity =>
         activity.taskIds.some(taskId => taskId.id === selectedTaskId)
-    ) && (stop.type === 'STORE' || stop.type === 'CUSTOMER')
+    ) && (stop.type === "STORE" || stop.type === "CUSTOMER")
 );
 
 // Determine Current Stop
-const currentStop = stops.find(stop => 
-    stop.status === 'ENROUTE' || stop.status === 'ARRIVED'
+const currentStop = filteredStops.find(
+    stop => stop.status === "ENROUTE" || stop.status === "ARRIVED"
 );
 
 // Painting Conditions
 if (currentStop) {
     const hasPickupActivity = currentStop.activities.some(activity =>
-        activity.status === 'ENROUTE' || activity.status === 'ARRIVED' && activity.type === 'PICKUP'
+        (activity.status === "ENROUTE" || activity.status === "ARRIVED") && activity.type === "PICKUP"
     );
 
-    const hasDropoffActivity = currentStop.activities.some(activity =>
-        activity.status === 'DROPOFF'
+    const hasDropoffActivity = currentStop.activities.some(
+        activity => activity.status === "DROPOFF"
     );
 
-    // Paint Store
-    if (currentStop.type === 'STORE' && hasPickupActivity) {
-        // Logic to paint Store location (e.g., rendering marker on a map)
-        console.log(`Painting Store location: ${currentStop.location.latLong}`);
+    // Paint Store or Customer based on currentStop type
+    if (hasPickupActivity) {
+        if (currentStop.type === "STORE") {
+            console.log(`Painting Store location: ${currentStop.location.latLong}`);
+        } else if (currentStop.type === "CUSTOMER") {
+            console.log(`Painting Customer location: ${currentStop.location.latLong}`);
+        }
     }
 
-    // Paint Customer
-    if (currentStop.type === 'CUSTOMER' && hasPickupActivity) {
-        // Logic to paint Customer location (e.g., rendering marker on a map)
-        console.log(`Painting Customer location: ${currentStop.location.latLong}`);
-    }
+    // Paint Both if there's a dropoff activity
+    if (hasDropoffActivity) {
+        const storeStop = filteredStops.find(stop => stop.type === "STORE");
+        const customerStop = filteredStops.find(stop => stop.type === "CUSTOMER");
 
-    // Paint Both
-    if (currentStop.type === 'STORE' || currentStop.type === 'CUSTOMER' && hasDropoffActivity) {
-        // Logic to paint both Store and Customer locations (e.g., rendering markers on a map)
-        console.log(`Painting both Store and Customer locations: ${currentStop.location.latLong}`);
+        if (storeStop) {
+            console.log(`Painting Store location: ${storeStop.location.latLong}`);
+        }
+        if (customerStop) {
+            console.log(`Painting Customer location: ${customerStop.location.latLong}`);
+        }
     }
 }
