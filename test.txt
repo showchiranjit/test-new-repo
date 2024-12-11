@@ -1,201 +1,39 @@
-// Mock data for trips
-const trips = [
-  { tripId: "T123", tripName: "Trip to Zone A", otherDetails: "Details about Trip A" },
-  { tripId: "T456", tripName: "Trip to Zone B", otherDetails: "Details about Trip B" },
-  { tripId: "T789", tripName: "Trip to Zone C", otherDetails: "Details about Trip C" }
-];
-
-// Mock data for Incentive
-const mockIncentive: Incentive = {
-  incentiveTrackingId: "IT123456",
-  incentiveId: "I123456",
-  incentiveName: "Monthly Performance Bonus",
-  incentiveType: "Performance",
-  incentiveEndDate: "2023-12-31T23:59:59Z",
-  incentiveEndDateEpochMillis: 1704067199000,
-  showProgressBar: true,
-  eventProgress: [
-    {
-      summary: "Progress towards monthly targets",
-      eventName: "Monthly Sales Event",
-      target: 100,
-      actual: 75,
-      remaining: 25,
-      eventDetails: [
-        {
-          eventId: "E123",
-          eventStatus: "Ongoing",
-          storeId: "S123",
-          zone: "Zone A",
-          tripId: "T123",
-          eventDateTimeUTC: "2023-12-01T12:00:00Z",
-          orders: [
-            { orderId: "O123", orderStatus: "Completed" },
-            { orderId: "O124", orderStatus: "Pending" }
-          ],
-          numberOfOrders: 2,
-          region: "North",
-          timeZone: "UTC",
-          createdTimestamp: "2023-11-01T10:00:00Z"
-        },
-        {
-          eventId: "E124",
-          eventStatus: "Completed",
-          storeId: "S124",
-          zone: "Zone B",
-          tripId: "T456",
-          eventDateTimeUTC: "2023-12-02T12:00:00Z",
-          orders: [
-            { orderId: "O125", orderStatus: "Completed" }
-          ],
-          numberOfOrders: 1,
-          region: "South",
-          timeZone: "UTC",
-          createdTimestamp: "2023-11-02T10:00:00Z"
-        }
-      ],
-      tiers: [
-        {
-          sequence: 1,
-          thresholdEventCount: 50,
-          amount: 500
-        },
-        {
-          sequence: 2,
-          thresholdEventCount: 100,
-          amount: 1000
-        }
-      ]
-    }
-  ],
-  incentiveConfigType: "Standard",
-  driverTimeZone: "UTC",
-  driverUserId: "D123456",
-  incentiveSummary: "Achieve sales targets to earn bonuses.",
-  incentiveDescription: "This incentive rewards drivers for meeting sales targets.",
-  targetIncentiveAmount: 1500,
-  incentiveStatus: "Active",
-  executionId: "EID123456"
-};
-
-// Create a new array based on the condition
-const filteredTripsWithMatchFlag = trips.map(trip => {
-  // Check if there is a matching event detail for the current trip
-  const matchedDetails = mockIncentive.eventProgress.flatMap(event => 
-    event.eventDetails.filter(detail => detail.tripId === trip.tripId)
-  );
-
-  // Determine if there is a match
-  const matched = matchedDetails.length > 0;
-
-  // Create the new object with the trip details, zone, and matched flag
-  return {
-    ...trip, // Spread the trip object
-    zone: matched ? matchedDetails[0].zone : null, // Get the zone if matched, otherwise null
-    matched // Set the matched flag
-  };
-});
-
-// Resulting array
-console.log(filteredTripsWithMatchFlag);
-
-
-// Mock data for trips
-const trips = [
-  { tripId: "T123", tripName: "Trip to Zone A", otherDetails: "Details about Trip A" },
-  { tripId: "T456", tripName: "Trip to Zone B", otherDetails: "Details about Trip B" },
-  { tripId: "T789", tripName: "Trip to Zone C", otherDetails: "Details about Trip C" }
-];
-
-// Mock data for Incentive
-const mockIncentive: Incentive = {
-  incentiveTrackingId: "IT123456",
-  incentiveId: "I123456",
-  incentiveName: "Monthly Performance Bonus",
-  incentiveType: "Performance",
-  incentiveEndDate: "2023-12-31T23:59:59Z",
-  incentiveEndDateEpochMillis: 1704067199000,
-  showProgressBar: true,
-  eventProgress: [
-    {
-      summary: "Progress towards monthly targets",
-      eventName: "Monthly Sales Event",
-      target: 100,
-      actual: 75,
-      remaining: 25,
-      eventDetails: [
-        {
-          eventId: "E123",
-          eventStatus: "Ongoing",
-          storeId: "S123",
-          zone: "Zone A",
-          tripId: "T123",
-          eventDateTimeUTC: "2023-12-01T12:00:00Z",
-          orders: [
-            { orderId: "O123", orderStatus: "Completed" },
-            { orderId: "O124", orderStatus: "Pending" }
-          ],
-          numberOfOrders: 2,
-          region: "North",
-          timeZone: "UTC",
-          createdTimestamp: "2023-11-01T10:00:00Z"
-        },
-        {
-          eventId: "E124",
-          eventStatus: "Completed",
-          storeId: "S124",
-          zone: "Zone B",
-          tripId: "T456",
-          eventDateTimeUTC: "2023-12-02T12:00:00Z",
-          orders: [
-            { orderId: "O125", orderStatus: "Completed" }
-          ],
-          numberOfOrders: 1,
-          region: "South",
-          timeZone: "UTC",
-          createdTimestamp: "2023-11-02T10:00:00Z"
-        }
-      ],
-      tiers: [
-        {
-          sequence: 1,
-          thresholdEventCount: 50,
-          amount: 500
-        },
-        {
-          sequence: 2,
-          thresholdEventCount: 100,
-          amount: 1000
-        }
-      ]
-    }
-  ],
-  incentiveConfigType: "Standard",
-  driverTimeZone: "UTC",
-  driverUserId: "D123456",
-  incentiveSummary: "Achieve sales targets to earn bonuses.",
-  incentiveDescription: "This incentive rewards drivers for meeting sales targets.",
-  targetIncentiveAmount: 1500,
-  incentiveStatus: "Active",
-  executionId: "EID123456"
-};
-
-// Create a new array based on the condition
-const filteredTrips = trips.flatMap(trip => 
-  mockIncentive.eventProgress.flatMap(event => 
-    event.eventDetails
-      .filter(detail => detail.tripId === trip.tripId)
-      .map(detail => ({
-        ...trip, // Spread the trip object
-        zone: detail.zone // Add the zone from eventDetails
-      }))
-  )
+const filteredStops = stops.filter(stop =>
+    stop.activities.some(activity =>
+        activity.taskIds.some(taskId => taskId.id === selectedTaskId)
+    ) && (stop.type === 'STORE' || stop.type === 'CUSTOMER')
 );
 
-// Resulting array
-console.log(filteredTrips);
+// Determine Current Stop
+const currentStop = stops.find(stop => 
+    stop.status === 'ENROUTE' || stop.status === 'ARRIVED'
+);
 
+// Painting Conditions
+if (currentStop) {
+    const hasPickupActivity = currentStop.activities.some(activity =>
+        activity.status === 'ENROUTE' || activity.status === 'ARRIVED' && activity.type === 'PICKUP'
+    );
 
+    const hasDropoffActivity = currentStop.activities.some(activity =>
+        activity.status === 'DROPOFF'
+    );
 
+    // Paint Store
+    if (currentStop.type === 'STORE' && hasPickupActivity) {
+        // Logic to paint Store location (e.g., rendering marker on a map)
+        console.log(`Painting Store location: ${currentStop.location.latLong}`);
+    }
 
+    // Paint Customer
+    if (currentStop.type === 'CUSTOMER' && hasPickupActivity) {
+        // Logic to paint Customer location (e.g., rendering marker on a map)
+        console.log(`Painting Customer location: ${currentStop.location.latLong}`);
+    }
 
+    // Paint Both
+    if (currentStop.type === 'STORE' || currentStop.type === 'CUSTOMER' && hasDropoffActivity) {
+        // Logic to paint both Store and Customer locations (e.g., rendering markers on a map)
+        console.log(`Painting both Store and Customer locations: ${currentStop.location.latLong}`);
+    }
+}
