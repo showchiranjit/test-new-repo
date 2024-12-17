@@ -1,104 +1,101 @@
-const filteredStops = stops.filter(stop =>
-    stop.activities.some(activity =>
-        activity.taskIds.some(taskId => taskId.id === selectedTaskId)
-    ) && (stop.type === "STORE" || stop.type === "CUSTOMER")
-);
+// src/utilsq.ts
+function mapAssignments(assignments, events) {
+    return assignments.map((assignment, index) => {
+        const username = assignment.agent.userName; // Get the username from the assignment
 
-// Determine Current Stop
-const currentStop = filteredStops.find(
-    stop => stop.status === "ENROUTE" || stop.status === "ARRIVED"
-);
+        const startDate = new Date(assignment.agent.assignedDate);
+        const endDate = (index + 1 < assignments.length) 
+            ? new Date(assignments[index + 1].agent.assignedDate) 
+            : new Date(); // Use current date if it's the last assignment
 
-// Painting Conditions
-if (currentStop) {
-    const hasPickupActivity = currentStop.activities.some(activity =>
-        (activity.status === "ENROUTE" || activity.status === "ARRIVED") && activity.type === "PICKUP"
-    );
+        const relevantEvents = events.filter(event => {
+            const eventDate = new Date(event.agent.createdDate);
+            return eventDate >= startDate && eventDate <= endDate && event.agent.userName === username;
+        });
 
-    const hasDropoffActivity = currentStop.activities.some(
-        activity => activity.status === "DROPOFF"
-    );
-
-    // Paint Store or Customer based on currentStop type
-    if (hasPickupActivity) {
-        if (currentStop.type === "STORE") {
-            console.log(`Painting Store location: ${currentStop.location.latLong}`);
-        } else if (currentStop.type === "CUSTOMER") {
-            console.log(`Painting Customer location: ${currentStop.location.latLong}`);
-        }
-    }
-
-    // Paint Both if there's a dropoff activity
-    if (hasDropoffActivity) {
-        const storeStop = filteredStops.find(stop => stop.type === "STORE");
-        const customerStop = filteredStops.find(stop => stop.type === "CUSTOMER");
-
-        if (storeStop) {
-            console.log(`Painting Store location: ${storeStop.location.latLong}`);
-        }
-        if (customerStop) {
-            console.log(`Painting Customer location: ${customerStop.location.latLong}`);
-        }
-    }
+        return {
+            assignment,
+            events: relevantEvents
+        };
+    }).filter(item => item.events.length > 0); // Filter out assignments with no relevant events
 }
 
+// ... existing code ...
 
 
 
 
-function getLocations(stops: Stop[], selectedTaskId: number): Locations {
-    // Filter Stops based on selectedTaskId and ensure type is either STORE or CUSTOMER
-    const filteredStops = stops.filter(stop =>
-        stop.activities.some(activity =>
-            activity.taskIds.some(taskId => taskId.id === selectedTaskId)
-        ) && (stop.type === "STORE" || stop.type === "CUSTOMER")
-    );
 
-    // Determine Current Stop
-    const currentStop = filteredStops.find(
-        stop => stop.status === "ENROUTE" || stop.status === "ARRIVED"
-    );
 
-    // Initialize locations object to hold results
-    const locations: Locations = {
-        storeLocation: null,
-        customerLocation: null,
-        currentStop: currentStop ? currentStop.location.latLong : null
+// src/utilsq.ts
+
+interface Agent {
+    userName: string;
+    actions?: Action[];
+}
+
+interface Action {
+    startDate: string;
+    endDate: string;
+    agentAttributes?: {
+        status?: string;
+        skillName?: string;
+        skillId?: string;
+        vccContactIds?: string;
     };
-
-    // Painting Conditions
-    if (currentStop) {
-        const hasPickupActivity = currentStop.activities.some(activity =>
-            (activity.status === "ENROUTE" || activity.status === "ARRIVED") && activity.type === "PICKUP"
-        );
-
-        const hasDropoffActivity = currentStop.activities.some(
-            activity => activity.status === "DROPOFF"
-        );
-
-        // Paint Store or Customer based on currentStop type
-        if (hasPickupActivity) {
-            if (currentStop.type === "STORE") {
-                locations.storeLocation = currentStop.location.latLong;
-            } else if (currentStop.type === "CUSTOMER") {
-                locations.customerLocation = currentStop.location.latLong;
-            }
-        }
-
-        // Paint Both if there's a dropoff activity
-        if (hasDropoffActivity) {
-            const storeStop = filteredStops.find(stop => stop.type === "STORE");
-            const customerStop = filteredStops.find(stop => stop.type === "CUSTOMER");
-
-            if (storeStop) {
-                locations.storeLocation = storeStop.location.latLong;
-            }
-            if (customerStop) {
-                locations.customerLocation = customerStop.location.latLong;
-            }
-        }
-    }
-
-    // Return the locations object
-    return locations;
 }
+
+interface Assignment {
+    agent: Agent;
+    assignedDate: string;
+}
+
+interface EventAgent {
+    userName: string;
+    action?: string;
+    noteText?: string;
+    createdDate: string;
+    eventAttributes?: object;
+}
+
+interface Event {
+    agent: EventAgent;
+    order?: {
+        id: string;
+        store: {
+            id: string;
+        };
+        action?: string;
+        noteText?: string;
+        createdDate: string;
+        eventAttributes?: object;
+    };
+}
+
+interface MappedAssignment {
+    assignment: Assignment;
+    events: Event[];
+}
+
+function mapAssignments(assignments: Assignment[], events: Event[]): MappedAssignment[] {
+    return assignments.map((assignment, index) => {
+        const username = assignment.agent.userName; // Get the username from the assignment
+
+        const startDate = new Date(assignment.agent.assignedDate);
+        const endDate = (index + 1 < assignments.length) 
+            ? new Date(assignments[index + 1].agent.assignedDate) 
+            : new Date(); // Use current date if it's the last assignment
+
+        const relevantEvents = events.filter(event => {
+            const eventDate = new Date(event.agent.createdDate);
+            return eventDate >= startDate && eventDate <= endDate && event.agent.userName === username;
+        });
+
+        return {
+            assignment,
+            events: relevantEvents
+        };
+    }).filter(item => item.events.length > 0); // Filter out assignments with no relevant events
+}
+
+// ... existing code ...
