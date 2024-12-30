@@ -1,101 +1,53 @@
-// src/utilsq.ts
-function mapAssignments(assignments, events) {
-    return assignments.map((assignment, index) => {
-        const username = assignment.agent.userName; // Get the username from the assignment
-
-        const startDate = new Date(assignment.agent.assignedDate);
-        const endDate = (index + 1 < assignments.length) 
-            ? new Date(assignments[index + 1].agent.assignedDate) 
-            : new Date(); // Use current date if it's the last assignment
-
-        const relevantEvents = events.filter(event => {
-            const eventDate = new Date(event.agent.createdDate);
-            return eventDate >= startDate && eventDate <= endDate && event.agent.userName === username;
-        });
-
-        return {
-            assignment,
-            events: relevantEvents
-        };
-    }).filter(item => item.events.length > 0); // Filter out assignments with no relevant events
-}
+// ... existing imports ...
+import { DirectionsService } from "@react-google-maps/api"; // Import DirectionsService
 
 // ... existing code ...
 
+const storeLocation: Location = { lat: 34.0522, lng: -118.2437 }; // Store location in Los Angeles, CA
+const customerLocation: Location = { lat: 34.2522, lng: -118.2437 }; // Customer location ~20 km away
+const currentDriverLocation: Location = { lat: 34.2572, lng: -118.2487 }; // Driver's current location ~1 km from customer
 
+const [actualRouteTaken, setActualRouteTaken] = useState<google.maps.LatLngLiteral[]>([]); // State for actual route taken
 
+// Function to fetch the route from store to driver location
+const fetchRoute = useCallback(() => {
+  const directionsService = new window.google.maps.DirectionsService();
+  directionsService.route(
+    {
+      origin: storeLocation,
+      destination: currentDriverLocation,
+      travelMode: window.google.maps.TravelMode.DRIVING,
+    },
+    (result, status) => {
+      if (status === window.google.maps.DirectionsStatus.OK) {
+        const route = result.routes[0];
+        const encodedPath = route.legs[0].steps.map(step => step.polyline.points).join('');
+        const decodedPath = window.google.maps.geometry.encoding.decodePath(encodedPath);
+        setActualRouteTaken(decodedPath);
+      } else {
+        console.error("Error fetching directions: ", status);
+      }
+    }
+  );
+}, [storeLocation, currentDriverLocation]);
 
+// Call fetchRoute when the component is loaded
+useEffect(() => {
+  fetchRoute();
+}, [fetchRoute]);
 
+// Calculate distance between customer and driver
+const distanceToCustomer =
+  window.google.maps.geometry.spherical.computeDistanceBetween(
+    new window.google.maps.LatLng(currentDriverLocation.lat, currentDriverLocation.lng),
+    new window.google.maps.LatLng(customerLocation.lat, customerLocation.lng)
+  );
 
-// src/utilsq.ts
-
-interface Agent {
-    userName: string;
-    actions?: Action[];
-}
-
-interface Action {
-    startDate: string;
-    endDate: string;
-    agentAttributes?: {
-        status?: string;
-        skillName?: string;
-        skillId?: string;
-        vccContactIds?: string;
-    };
-}
-
-interface Assignment {
-    agent: Agent;
-    assignedDate: string;
-}
-
-interface EventAgent {
-    userName: string;
-    action?: string;
-    noteText?: string;
-    createdDate: string;
-    eventAttributes?: object;
-}
-
-interface Event {
-    agent: EventAgent;
-    order?: {
-        id: string;
-        store: {
-            id: string;
-        };
-        action?: string;
-        noteText?: string;
-        createdDate: string;
-        eventAttributes?: object;
-    };
-}
-
-interface MappedAssignment {
-    assignment: Assignment;
-    events: Event[];
-}
-
-function mapAssignments(assignments: Assignment[], events: Event[]): MappedAssignment[] {
-    return assignments.map((assignment, index) => {
-        const username = assignment.agent.userName; // Get the username from the assignment
-
-        const startDate = new Date(assignment.agent.assignedDate);
-        const endDate = (index + 1 < assignments.length) 
-            ? new Date(assignments[index + 1].agent.assignedDate) 
-            : new Date(); // Use current date if it's the last assignment
-
-        const relevantEvents = events.filter(event => {
-            const eventDate = new Date(event.agent.createdDate);
-            return eventDate >= startDate && eventDate <= endDate && event.agent.userName === username;
-        });
-
-        return {
-            assignment,
-            events: relevantEvents
-        };
-    }).filter(item => item.events.length > 0); // Filter out assignments with no relevant events
-}
+// Calculate distance between store and customer
+const distanceToStore =
+  window.google.maps.geometry.spherical.computeDistanceBetween(
+    new window.google.maps.LatLng(storeLocation.lat, storeLocation.lng),
+    new window.google.maps.LatLng(customerLocation.lat, customerLocation.lng)
+  );
 
 // ... existing code ...
