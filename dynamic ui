@@ -1,79 +1,57 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import DeliveryMapWidget from './DeliveryMapWidget';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Context } from 'context';
+import DeliveryMapWidget from './DeliveryMapWidget';
+import * as GeofenceService from 'services/spark-driver/geofence';
 
-// Mock the Google Maps API
-global.google = {
-  maps: {
-    Map: jest.fn(),
-    LatLng: jest.fn((lat, lng) => ({ lat, lng })),
-    LatLngBounds: jest.fn(() => ({
-      extend: jest.fn(),
-      contains: jest.fn(),
-    })),
-    Size: jest.fn((width, height) => ({ width, height })), // Mocking google.maps.Size
-    Point: jest.fn((x, y) => ({ x, y })), // Mocking google.maps.Point
-    Marker: jest.fn(),
-    Circle: jest.fn(),
-    Polyline: jest.fn(),
-    geometry: {
-      spherical: {
-        computeDistanceBetween: jest.fn(() => 1000), // Mock distance calculation
-      },
-      encoding: {
-        decodePath: jest.fn(() => [
-          { lat: 37.7749, lng: -122.4194 },
-          { lat: 37.8044, lng: -122.2711 },
-        ]),
-      },
-    },
+jest.mock('services/spark-driver/geofence', () => ({
+  FetchGeofenceService: jest.fn(),
+}));
+
+jest.mock('@react-google-maps/api', () => ({
+  GoogleMap: jest.fn(({ children }) => <div>{children}</div>),
+  MarkerF: jest.fn(() => <div>Marker</div>),
+  Circle: jest.fn(() => <div>Circle</div>),
+  Polyline: jest.fn(() => <div>Polyline</div>),
+  useJsApiLoader: jest.fn(() => ({ isLoaded: true })),
+}));
+
+const mockDispatch = jest.fn();
+const mockState = {
+  sparkDriver: {
+    selectedTask: { id: 'task-123', orderId: 'order-123' },
+    selectedTrip: { tripId: 'trip-123' },
   },
 };
 
-// Mock React Google Maps Library
-jest.mock('@react-google-maps/api', () => ({
-  useJsApiLoader: () => ({ isLoaded: true }),
-  GoogleMap: ({ children }) => <div data-testid="google-map">{children}</div>,
-  MarkerF: () => <div data-testid="marker"></div>,
-  Circle: () => <div data-testid="circle"></div>,
-  Polyline: () => <div data-testid="polyline"></div>,
-}));
+describe('DeliveryMapWidget - Refresh Map', () => {
+  it('should call refreshMap when the refresh button is clicked', () => {
+    const geofenceServiceMock = jest
+      .spyOn(GeofenceService, 'FetchGeofenceService')
+      .mockResolvedValue({
+        geofenceRadius: { measurementValue: 500 },
+        currentDriverLocation: { lat: 40.7128, lng: -74.006 },
+        tasks: [{ actualRouteTaken: 'encoded-route', estimatedRoutePending: null }],
+      });
 
-// Mock utility functions
-jest.mock('utils/spark-driver/delivery-map.utils', () => ({
-  getStoreCustomerAndCurrentStopLocation: jest.fn(() => ({
-    storeLocation: { location: { latLong: { lat: 37.7749, lng: -122.4194 } } },
-    customerLocation: { location: { latLong: { lat: 37.8044, lng: -122.2711 } } },
-    currentStop: { location: { latLong: { lat: 37.7888, lng: -122.4 } }, id: 'stop1' },
-  })),
-}));
-
-describe('DeliveryMapWidget', () => {
-  const mockDispatch = jest.fn();
-
-  const mockContextValue = {
-    state: {
-      sparkDriver: {
-        selectedTask: { id: 'task1', orderId: 'order1' },
-        selectedTrip: { tripId: 'trip1' },
-      },
-    },
-    dispatch: mockDispatch,
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks(); // Clear mocks before each test
-  });
-
-  it('renders the DeliveryMapWidget component', () => {
     render(
-      <Context.Provider value={mockContextValue}>
+      <Context.Provider value={{ state: mockState, dispatch: mockDispatch }}>
         <DeliveryMapWidget />
       </Context.Provider>
     );
 
-    expect(screen.getByText("Driver's Location")).toBeInTheDocument();
-    expect(screen.getByTestId('google-map')).toBeInTheDocument();
+    // Ensure the refresh button exists
+    const refreshButton = screen.getByRole('button', { name: /refresh map/i });
+    expect(refreshButton).toBeInTheDocument();
+
+    // Simulate clicking the refresh button
+    fireEvent.click(refreshButton);
+
+    // Ensure the services are called during refresh
+    expect(geofenceServiceMock).toHaveBeenCalledTimes(1);
+
+    // Ensure dispatch actions for spinner control are called
+    expect(mockDispatch).toHaveBeenCalledWith({ type: 'openSpinner' });
+    expect(mockDispatch).toHaveBeenCalledWith({ type: 'closeSpinner' });
   });
 });
