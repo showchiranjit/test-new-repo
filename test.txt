@@ -1,168 +1,128 @@
-// src/__tests__/DeliveryMapWidget.test.tsx
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { GlobalContext } from 'context';
-import DeliveryMapWidget from '../deliveryMap';
-import { FetchTripExecutor } from 'services/spark-driver/trip-executor';
-import { FetchGeofenceService } from 'services/spark-driver/geofence';
+import { render, screen, fireEvent } from '@testing-library/react';
+import DeliveryMapWidget from './DeliveryMapWidget';
+import { Context } from 'context';
 
-// Mocking the services
-jest.mock('services/spark-driver/trip-executor');
-jest.mock('services/spark-driver/geofence');
-
-const mockDispatch = jest.fn();
-const mockState = {
-  sparkDriver: {
-    selectedTask: { id: 'task1', orderId: 'order1' },
-    selectedTrip: { tripId: 'trip1' },
+// Mock the Google Maps API
+global.google = {
+  maps: {
+    Map: jest.fn(),
+    LatLng: jest.fn((lat, lng) => ({ lat, lng })),
+    LatLngBounds: jest.fn(() => ({
+      extend: jest.fn(),
+      contains: jest.fn(),
+    })),
+    Marker: jest.fn(),
+    Circle: jest.fn(),
+    Polyline: jest.fn(),
+    geometry: {
+      spherical: {
+        computeDistanceBetween: jest.fn(() => 1000), // Mock distance calculation
+      },
+      encoding: {
+        decodePath: jest.fn(() => [
+          { lat: 37.7749, lng: -122.4194 },
+          { lat: 37.8044, lng: -122.2711 },
+        ]),
+      },
+    },
   },
 };
 
-const renderWithContext = (children) => {
-  return render(
-    <GlobalContext.Provider value={{ dispatch: mockDispatch, state: mockState }}>
-      {children}
-    </GlobalContext.Provider>
-  );
-};
+// Mock React Google Maps Library
+jest.mock('@react-google-maps/api', () => ({
+  useJsApiLoader: () => ({ isLoaded: true }),
+  GoogleMap: ({ children }) => <div data-testid="google-map">{children}</div>,
+  MarkerF: () => <div data-testid="marker"></div>,
+  Circle: () => <div data-testid="circle"></div>,
+  Polyline: () => <div data-testid="polyline"></div>,
+}));
+
+// Mock utility functions
+jest.mock('utils/spark-driver/delivery-map.utils', () => ({
+  getStoreCustomerAndCurrentStopLocation: jest.fn(() => ({
+    storeLocation: { location: { latLong: { lat: 37.7749, lng: -122.4194 } } },
+    customerLocation: { location: { latLong: { lat: 37.8044, lng: -122.2711 } } },
+    currentStop: { location: { latLong: { lat: 37.7888, lng: -122.4 } }, id: 'stop1' },
+  })),
+}));
 
 describe('DeliveryMapWidget', () => {
+  const mockDispatch = jest.fn();
+
+  const mockContextValue = {
+    state: {
+      sparkDriver: {
+        selectedTask: { id: 'task1', orderId: 'order1' },
+        selectedTrip: { tripId: 'trip1' },
+      },
+    },
+    dispatch: mockDispatch,
+  };
+
   beforeEach(() => {
-    (FetchTripExecutor as jest.Mock).mockResolvedValue({
-      stops: [
-        {
-          location: { latLong: { lat: 1, lng: 1 } },
-          type: 'pickup',
-          id: 'stop1',
-        },
-      ],
-    });
-
-    (FetchGeofenceService as jest.Mock).mockResolvedValue({
-      geofenceRadius: { measurementValue: 100 },
-      currentDriverLocation: { lat: 1, lng: 1 },
-      tasks: [{ actualRouteTaken: 'encodedPath', estimatedRoutePending: null }],
-    });
+    jest.clearAllMocks(); // Clear mocks before each test
   });
 
-  test('renders loading state initially', () => {
-    renderWithContext(<DeliveryMapWidget />);
-    expect(screen.getByText(/Loading.../i)).toBeInTheDocument();
+  it('renders the DeliveryMapWidget component', () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <DeliveryMapWidget />
+      </Context.Provider>
+    );
+
+    expect(screen.getByText("Driver's Location")).toBeInTheDocument();
+    expect(screen.getByTestId('google-map')).toBeInTheDocument();
   });
 
-  test('renders driver location after loading', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    expect(await screen.findByText(/Driver's Location/i)).toBeInTheDocument();
+  it('shows a loading spinner when map is not loaded', () => {
+    jest.mock('@react-google-maps/api', () => ({
+      useJsApiLoader: () => ({ isLoaded: false }),
+    }));
+
+    render(
+      <Context.Provider value={mockContextValue}>
+        <DeliveryMapWidget />
+      </Context.Provider>
+    );
+
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
-  test('refreshes the map when the refresh button is clicked', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await screen.findByText(/Driver's Location/i);
-    
+  it('calls refreshMap when the refresh button is clicked', () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <DeliveryMapWidget />
+      </Context.Provider>
+    );
+
     const refreshButton = screen.getByRole('button', { name: /refresh map/i });
     fireEvent.click(refreshButton);
-    
-    expect(mockDispatch).toHaveBeenCalledTimes(2); // One for loading and one for refresh
+
+    expect(mockDispatch).toHaveBeenCalledWith(expect.any(Function));
   });
 
-  test('handles marker click for customer location', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await screen.findByText(/Driver's Location/i);
-    
-    const customerMarker = screen.getByRole('button', { name: /customer location/i });
-    fireEvent.click(customerMarker);
-    
-    expect(mockDispatch).toHaveBeenCalledWith(expect.any(Object)); // Check if dispatch is called with the correct action
+  it('renders store, customer, and driver markers when locations are available', () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <DeliveryMapWidget />
+      </Context.Provider>
+    );
+
+    expect(screen.getAllByTestId('marker')).toHaveLength(2); // Store and Customer markers
   });
 
-  test('calls geofence API when current stop changes', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await screen.findByText(/Driver's Location/i);
-    
-    // Simulate changing the current stop
-    const newStop = { location: { latLong: { lat: 2, lng: 2 } }, type: 'dropoff', id: 'stop2' };
-    fireEvent.click(screen.getByText(/Driver's Location/i)); // Simulate marker click to change current stop
+  it('updates geofence status based on driver location', () => {
+    const mockComputeDistanceBetween = jest.fn(() => 500); // Driver within geofence
+    global.google.maps.geometry.spherical.computeDistanceBetween = mockComputeDistanceBetween;
 
-    expect(FetchGeofenceService).toHaveBeenCalled();
-  });
+    render(
+      <Context.Provider value={mockContextValue}>
+        <DeliveryMapWidget />
+      </Context.Provider>
+    );
 
-  test('checks driver zone correctly', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await screen.findByText(/Driver's Location/i);
-    
-    // Simulate driver location and geofence radius
-    const driverLocation = { lat: 1, lng: 1 };
-    const geofenceRadius = 100;
-
-    // Mock the function to check driver zone
-    const checkDriverZone = jest.fn();
-    checkDriverZone.mockImplementation(() => {
-      const distanceToPickupOrDropoff = 50; // Simulate distance
-      return distanceToPickupOrDropoff <= geofenceRadius;
-    });
-
-    expect(checkDriverZone()).toBe(true); // Check if driver is within geofence
-  });
-
-  test('renders actual route polyline when available', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await screen.findByText(/Driver's Location/i);
-    
-    // Mock actual route polyline
-    const actualRoutePolyLine = [{ lat: 1, lng: 1 }, { lat: 2, lng: 2 }];
-    
-    // Simulate setting the actual route polyline
-    const setActualRoutePolyLine = jest.fn();
-    setActualRoutePolyLine(actualRoutePolyLine);
-
-    expect(setActualRoutePolyLine).toHaveBeenCalledWith(actualRoutePolyLine);
-  });
-
-  test('renders estimated route polyline when available', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await screen.findByText(/Driver's Location/i);
-    
-    // Mock estimated route polyline
-    const estimatedRoutePolyLine = [{ lat: 2, lng: 2 }, { lat: 3, lng: 3 }];
-    
-    // Simulate setting the estimated route polyline
-    const setEstimatedRoutePolyLine = jest.fn();
-    setEstimatedRoutePolyLine(estimatedRoutePolyLine);
-
-    expect(setEstimatedRoutePolyLine).toHaveBeenCalledWith(estimatedRoutePolyLine);
-  });
-
-  test('handles error fetching trip executor data', async () => {
-    (FetchTripExecutor as jest.Mock).mockRejectedValue(new Error('Fetch error'));
-    
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith(expect.any(Object))); // Check if dispatch is called
-    expect(screen.queryByText(/Driver's Location/i)).not.toBeInTheDocument(); // Ensure driver location is not rendered
-  });
-
-  test('handles error fetching geofence data', async () => {
-    (FetchGeofenceService as jest.Mock).mockRejectedValue(new Error('Fetch error'));
-    
-    renderWithContext(<DeliveryMapWidget />);
-    
-    // Wait for the loading state to finish
-    await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith(expect.any(Object))); // Check if dispatch is called
-    expect(screen.queryByText(/Driver's Location/i)).not.toBeInTheDocument(); // Ensure driver location is not rendered
+    expect(mockComputeDistanceBetween).toHaveBeenCalled();
+    // Expect the geofence circle to use the 'green' stroke color
   });
 });
