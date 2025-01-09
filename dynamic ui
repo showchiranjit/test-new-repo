@@ -1,12 +1,8 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { Context } from 'context';
 import DeliveryMapWidget from './DeliveryMapWidget';
-import * as GeofenceService from 'services/spark-driver/geofence';
-
-jest.mock('services/spark-driver/geofence', () => ({
-  FetchGeofenceService: jest.fn(),
-}));
+import * as TripExecutorService from 'services/spark-driver/trip-executor';
 
 jest.mock('@react-google-maps/api', () => ({
   GoogleMap: jest.fn(({ children }) => <div>{children}</div>),
@@ -14,6 +10,10 @@ jest.mock('@react-google-maps/api', () => ({
   Circle: jest.fn(() => <div>Circle</div>),
   Polyline: jest.fn(() => <div>Polyline</div>),
   useJsApiLoader: jest.fn(() => ({ isLoaded: true })),
+}));
+
+jest.mock('services/spark-driver/trip-executor', () => ({
+  FetchTripExecutor: jest.fn(),
 }));
 
 const mockDispatch = jest.fn();
@@ -24,15 +24,12 @@ const mockState = {
   },
 };
 
-describe('DeliveryMapWidget - Refresh Map', () => {
-  it('should call refreshMap when the refresh button is clicked', () => {
-    const geofenceServiceMock = jest
-      .spyOn(GeofenceService, 'FetchGeofenceService')
-      .mockResolvedValue({
-        geofenceRadius: { measurementValue: 500 },
-        currentDriverLocation: { lat: 40.7128, lng: -74.006 },
-        tasks: [{ actualRouteTaken: 'encoded-route', estimatedRoutePending: null }],
-      });
+describe('DeliveryMapWidget - FetchTripExecutor Catch Scenario', () => {
+  it('should handle errors from FetchTripExecutor gracefully', async () => {
+    // Mock FetchTripExecutor to throw an error
+    const tripExecutorMock = jest
+      .spyOn(TripExecutorService, 'FetchTripExecutor')
+      .mockRejectedValue(new Error('Failed to fetch trip executor data'));
 
     render(
       <Context.Provider value={{ state: mockState, dispatch: mockDispatch }}>
@@ -40,18 +37,19 @@ describe('DeliveryMapWidget - Refresh Map', () => {
       </Context.Provider>
     );
 
-    // Ensure the refresh button exists
-    const refreshButton = screen.getByRole('button', { name: /refresh map/i });
-    expect(refreshButton).toBeInTheDocument();
-
-    // Simulate clicking the refresh button
-    fireEvent.click(refreshButton);
-
-    // Ensure the services are called during refresh
-    expect(geofenceServiceMock).toHaveBeenCalledTimes(1);
-
-    // Ensure dispatch actions for spinner control are called
+    // Ensure the spinner is opened
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'openSpinner' });
+
+    // Wait for the FetchTripExecutor call to finish
+    await screen.findByText('Loading...'); // Adjust if needed for loading state UI
+
+    // Ensure the error is logged in the console (or however your app handles it)
+    expect(console.log).toHaveBeenCalledWith('Error fetching trip executor data');
+
+    // Ensure the spinner is closed
     expect(mockDispatch).toHaveBeenCalledWith({ type: 'closeSpinner' });
+
+    // Ensure FetchTripExecutor was called once
+    expect(tripExecutorMock).toHaveBeenCalledWith({ tripId: 'trip-123' });
   });
 });
