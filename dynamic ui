@@ -1,55 +1,74 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { Context } from 'context';
-import DeliveryMapWidget from './DeliveryMapWidget';
-import * as TripExecutorService from 'services/spark-driver/trip-executor';
+import { render, screen, fireEvent } from '@testing-library/react';
+import TripSearch from './TripSearch';
+import debounce from 'lodash/debounce';
 
-jest.mock('@react-google-maps/api', () => ({
-  GoogleMap: jest.fn(({ children }) => <div>{children}</div>),
-  MarkerF: jest.fn(() => <div>Marker</div>),
-  Circle: jest.fn(() => <div>Circle</div>),
-  Polyline: jest.fn(() => <div>Polyline</div>),
-  useJsApiLoader: jest.fn(() => ({ isLoaded: true })),
-}));
+jest.mock('lodash/debounce', () => jest.fn((fn) => fn)); // Mock debounce for testing
 
-jest.mock('services/spark-driver/trip-executor', () => ({
-  FetchTripExecutor: jest.fn(),
-}));
+describe('TripSearch Component', () => {
+  const mockOnSearch = jest.fn();
 
-const mockDispatch = jest.fn();
-const mockState = {
-  sparkDriver: {
-    selectedTask: { id: 'task-123', orderId: 'order-123' },
-    selectedTrip: { tripId: 'trip-123' },
-  },
-};
+  beforeEach(() => {
+    mockOnSearch.mockClear();
+  });
 
-describe('DeliveryMapWidget - FetchTripExecutor Catch Scenario', () => {
-  it('should handle errors from FetchTripExecutor gracefully', async () => {
-    // Mock FetchTripExecutor to throw an error
-    const tripExecutorMock = jest
-      .spyOn(TripExecutorService, 'FetchTripExecutor')
-      .mockRejectedValue(new Error('Failed to fetch trip executor data'));
+  test('renders the component correctly', () => {
+    render(<TripSearch onSearch={mockOnSearch} placeholder="Search here..." />);
 
-    render(
-      <Context.Provider value={{ state: mockState, dispatch: mockDispatch }}>
-        <DeliveryMapWidget />
-      </Context.Provider>
-    );
+    expect(screen.getByPlaceholderText('Search using trip#, order# or customer name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument();
+  });
 
-    // Ensure the spinner is opened
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'openSpinner' });
+  test('shows an error message when searching with an empty input', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
 
-    // Wait for the FetchTripExecutor call to finish
-    await screen.findByText('Loading...'); // Adjust if needed for loading state UI
+    fireEvent.click(screen.getByRole('button', { name: /search/i }));
 
-    // Ensure the error is logged in the console (or however your app handles it)
-    expect(console.log).toHaveBeenCalledWith('Error fetching trip executor data');
+    expect(screen.getByText('An order#, trip#, or customer name is required')).toBeInTheDocument();
+    expect(mockOnSearch).not.toHaveBeenCalled();
+  });
 
-    // Ensure the spinner is closed
-    expect(mockDispatch).toHaveBeenCalledWith({ type: 'closeSpinner' });
+  test('calls onSearch when valid input is provided and search is triggered', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
 
-    // Ensure FetchTripExecutor was called once
-    expect(tripExecutorMock).toHaveBeenCalledWith({ tripId: 'trip-123' });
+    const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
+    fireEvent.change(input, { target: { value: 'Test Query' } });
+    fireEvent.click(screen.getByRole('button', { name: /search/i }));
+
+    expect(mockOnSearch).toHaveBeenCalledWith('Test Query');
+    expect(screen.queryByText('An order#, trip#, or customer name is required')).not.toBeInTheDocument();
+  });
+
+  test('resets input when the remove icon is clicked', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
+
+    const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
+    fireEvent.change(input, { target: { value: 'Test Query' } });
+
+    const removeIcon = screen.getByRole('img', { hidden: true }); // Assuming the RemoveIcon uses a role like img
+    fireEvent.click(removeIcon);
+
+    expect(input).toHaveValue('');
+  });
+
+  test('triggers search when Enter key is pressed', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
+
+    const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
+    fireEvent.change(input, { target: { value: 'Test Query' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+    expect(mockOnSearch).toHaveBeenCalledWith('Test Query');
+  });
+
+  test('removes the last character and triggers search when Backspace is pressed', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
+
+    const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
+    fireEvent.change(input, { target: { value: 'Test Query' } });
+    fireEvent.keyDown(input, { key: 'Backspace', code: 'Backspace' });
+
+    expect(input).toHaveValue('Test Quer');
+    expect(mockOnSearch).toHaveBeenCalledWith('Test Quer');
   });
 });
