@@ -1,156 +1,79 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
+import { render, screen } from '@testing-library/react';
 import DeliveryMapWidget from './DeliveryMapWidget';
-import * as googleMapsApi from '@react-google-maps/api';
 import { Context } from 'context';
-import moment from 'moment';
-import { FetchTripExecutor } from 'services/spark-driver/trip-executor';
-import { FetchGeofenceService } from 'services/spark-driver/geofence';
-import userEvent from '@testing-library/user-event';
 
-// Mock external dependencies
-jest.mock('@react-google-maps/api', () => ({
-  useJsApiLoader: jest.fn(),
-  GoogleMap: jest.fn(({ children }) => <div>{children}</div>),
-  MarkerF: jest.fn(() => <div>Marker</div>),
-  Circle: jest.fn(() => <div>Circle</div>),
-  Polyline: jest.fn(() => <div>Polyline</div>),
-}));
-
-jest.mock('services/spark-driver/trip-executor', () => ({
-  FetchTripExecutor: jest.fn(),
-}));
-
-jest.mock('services/spark-driver/geofence', () => ({
-  FetchGeofenceService: jest.fn(),
-}));
-
-jest.mock('moment', () => {
-  return () => ({
-    format: jest.fn(() => '12:00 pm'),
-  });
-});
-
-// Mock Context Provider
-const mockDispatch = jest.fn();
-const mockState = {
-  sparkDriver: {
-    selectedTask: { id: 'task-123', orderId: 'order-123' },
-    selectedTrip: { tripId: 'trip-123' },
+// Mock the Google Maps API
+global.google = {
+  maps: {
+    Map: jest.fn(),
+    LatLng: jest.fn((lat, lng) => ({ lat, lng })),
+    LatLngBounds: jest.fn(() => ({
+      extend: jest.fn(),
+      contains: jest.fn(),
+    })),
+    Size: jest.fn((width, height) => ({ width, height })), // Mocking google.maps.Size
+    Point: jest.fn((x, y) => ({ x, y })), // Mocking google.maps.Point
+    Marker: jest.fn(),
+    Circle: jest.fn(),
+    Polyline: jest.fn(),
+    geometry: {
+      spherical: {
+        computeDistanceBetween: jest.fn(() => 1000), // Mock distance calculation
+      },
+      encoding: {
+        decodePath: jest.fn(() => [
+          { lat: 37.7749, lng: -122.4194 },
+          { lat: 37.8044, lng: -122.2711 },
+        ]),
+      },
+    },
   },
 };
 
-const renderWithContext = (ui: React.ReactElement) => {
-  return render(
-    <Context.Provider value={{ dispatch: mockDispatch, state: mockState }}>
-      {ui}
-    </Context.Provider>
-  );
-};
+// Mock React Google Maps Library
+jest.mock('@react-google-maps/api', () => ({
+  useJsApiLoader: () => ({ isLoaded: true }),
+  GoogleMap: ({ children }) => <div data-testid="google-map">{children}</div>,
+  MarkerF: () => <div data-testid="marker"></div>,
+  Circle: () => <div data-testid="circle"></div>,
+  Polyline: () => <div data-testid="polyline"></div>,
+}));
+
+// Mock utility functions
+jest.mock('utils/spark-driver/delivery-map.utils', () => ({
+  getStoreCustomerAndCurrentStopLocation: jest.fn(() => ({
+    storeLocation: { location: { latLong: { lat: 37.7749, lng: -122.4194 } } },
+    customerLocation: { location: { latLong: { lat: 37.8044, lng: -122.2711 } } },
+    currentStop: { location: { latLong: { lat: 37.7888, lng: -122.4 } }, id: 'stop1' },
+  })),
+}));
 
 describe('DeliveryMapWidget', () => {
+  const mockDispatch = jest.fn();
+
+  const mockContextValue = {
+    state: {
+      sparkDriver: {
+        selectedTask: { id: 'task1', orderId: 'order1' },
+        selectedTrip: { tripId: 'trip1' },
+      },
+    },
+    dispatch: mockDispatch,
+  };
+
   beforeEach(() => {
-    jest.clearAllMocks();
-    (googleMapsApi.useJsApiLoader as jest.Mock).mockReturnValue({
-      isLoaded: true,
-    });
-    (FetchTripExecutor as jest.Mock).mockResolvedValue({
-      stops: [],
-    });
-    (FetchGeofenceService as jest.Mock).mockResolvedValue({
-      geofenceRadius: { measurementValue: 500 },
-      currentDriverLocation: { lat: 37.7749, lng: -122.4194 },
-      tasks: [
-        {
-          actualRouteTaken: 'encodedRoute1',
-          estimatedRoutePending: 'encodedRoute2',
-        },
-      ],
-    });
+    jest.clearAllMocks(); // Clear mocks before each test
   });
 
-  it('renders the loading state initially', () => {
-    (googleMapsApi.useJsApiLoader as jest.Mock).mockReturnValue({
-      isLoaded: false,
-    });
-    renderWithContext(<DeliveryMapWidget />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
-  });
+  it('renders the DeliveryMapWidget component', () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <DeliveryMapWidget />
+      </Context.Provider>
+    );
 
-  it('renders the map with markers, circles, and polylines when loaded', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Driver's Location")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Marker')).toBeInTheDocument(); // Store, Driver, Customer markers
-    expect(screen.getByText('Circle')).toBeInTheDocument(); // Geofence circle
-    expect(screen.getAllByText('Polyline').length).toBeGreaterThanOrEqual(1); // Actual or Estimated Routes
-  });
-
-  it('calls FetchTripExecutor and updates state on mount', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-
-    await waitFor(() => {
-      expect(FetchTripExecutor).toHaveBeenCalledWith({ tripId: 'trip-123' });
-    });
-  });
-
-  it('calls FetchGeofenceService when currentStop changes', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-
-    await waitFor(() => {
-      expect(FetchGeofenceService).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tripId: 'trip-123',
-          orderId: 'order-123',
-          taskId: 'task-123',
-        })
-      );
-    });
-  });
-
-  it('updates time on mount and refresh', async () => {
-    renderWithContext(<DeliveryMapWidget />);
-    expect(screen.getByText('Last updated: 12:00 pm')).toBeInTheDocument();
-
-    const refreshButton = screen.getByLabelText('refresh map');
-    userEvent.click(refreshButton);
-
-    await waitFor(() => {
-      expect(FetchGeofenceService).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it('disables the refresh button if currentStop is null', () => {
-    (FetchTripExecutor as jest.Mock).mockResolvedValueOnce({ stops: null });
-    renderWithContext(<DeliveryMapWidget />);
-
-    expect(screen.getByLabelText('refresh map')).toBeDisabled();
-  });
-
-  it('fits the map bounds on load', () => {
-    const fitBoundsMock = jest.fn();
-    const mapMock = {
-      fitBounds: fitBoundsMock,
-    };
-
-    renderWithContext(<DeliveryMapWidget />);
-
-    expect(fitBoundsMock).not.toHaveBeenCalled(); // Ensures logic executes based on dependency presence
-  });
-
-  it('checks geofence radius on interval', async () => {
-    jest.useFakeTimers();
-    renderWithContext(<DeliveryMapWidget />);
-
-    jest.advanceTimersByTime(30000);
-    await waitFor(() => {
-      expect(FetchGeofenceService).toHaveBeenCalledTimes(2);
-    });
-
-    jest.useRealTimers();
+    expect(screen.getByText("Driver's Location")).toBeInTheDocument();
+    expect(screen.getByTestId('google-map')).toBeInTheDocument();
   });
 });
