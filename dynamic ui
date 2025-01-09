@@ -1,9 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import TripSearch from './TripSearch';
-import debounce from 'lodash/debounce';
-
-jest.mock('lodash/debounce', () => jest.fn((fn) => fn)); // Mock debounce for testing
 
 describe('TripSearch Component', () => {
   const mockOnSearch = jest.fn();
@@ -45,7 +42,7 @@ describe('TripSearch Component', () => {
     const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
     fireEvent.change(input, { target: { value: 'Test Query' } });
 
-    const removeIcon = screen.getByRole('img', { hidden: true }); // Assuming the RemoveIcon uses a role like img
+    const removeIcon = screen.getByTestId('remove-icon'); // Assuming the RemoveIcon has a test ID
     fireEvent.click(removeIcon);
 
     expect(input).toHaveValue('');
@@ -61,7 +58,7 @@ describe('TripSearch Component', () => {
     expect(mockOnSearch).toHaveBeenCalledWith('Test Query');
   });
 
-  test('removes the last character and triggers search when Backspace is pressed', () => {
+  test('removes the last character and triggers search when Backspace is pressed with more than 3 characters', () => {
     render(<TripSearch onSearch={mockOnSearch} />);
 
     const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
@@ -70,5 +67,38 @@ describe('TripSearch Component', () => {
 
     expect(input).toHaveValue('Test Quer');
     expect(mockOnSearch).toHaveBeenCalledWith('Test Quer');
+  });
+
+  test('does not trigger search when Backspace is pressed with less than 3 characters', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
+
+    const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
+    fireEvent.change(input, { target: { value: 'Te' } });
+    fireEvent.keyDown(input, { key: 'Backspace', code: 'Backspace' });
+
+    expect(input).toHaveValue('T');
+    expect(mockOnSearch).not.toHaveBeenCalled();
+  });
+
+  test('handles placeholder prop correctly', () => {
+    const customPlaceholder = 'Custom Placeholder';
+    render(<TripSearch onSearch={mockOnSearch} placeholder={customPlaceholder} />);
+
+    expect(screen.getByPlaceholderText(customPlaceholder)).toBeInTheDocument();
+  });
+
+  test('renders SearchIcon when input is empty', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
+
+    expect(screen.getByTestId('search-icon')).toBeInTheDocument();
+  });
+
+  test('renders RemoveIcon when input has value', () => {
+    render(<TripSearch onSearch={mockOnSearch} />);
+
+    const input = screen.getByPlaceholderText('Search using trip#, order# or customer name');
+    fireEvent.change(input, { target: { value: 'Test Query' } });
+
+    expect(screen.getByTestId('remove-icon')).toBeInTheDocument();
   });
 });
