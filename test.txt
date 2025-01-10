@@ -1,129 +1,108 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import TripAccordion from './TripAccordion';
-import { SortedTrip, SelectionType, Trip, DeliveryTask } from 'types/spark-driver/trip.types';
-import { formatDeliveryTimeRange, getTripTitleDate } from 'utils/spark-driver/trip-utils';
-import { DATE_FORMAT_V1 } from 'utils/moment-time-utils';
-import TaskList from './task-list';
-import '@testing-library/jest-dom';
+import { renderHook } from '@testing-library/react-hooks';
+import moment from 'moment';
+import { usePaginatedTrips } from './usePaginatedTrips';  // Adjust the import path
+import { SortedTrip } from 'types/spark-driver/trip.types';
 
-// Mock dependencies
-jest.mock('./task-list', () => jest.fn(() => <div data-testid="task-list">TaskList</div>));
-jest.mock('utils/spark-driver/trip-utils', () => ({
-  formatDeliveryTimeRange: jest.fn(() => '10:00 AM - 12:00 PM'),
-  getTripTitleDate: jest.fn(() => 'Jan 10, 2025'),
-}));
-
-const mockOnSelectTrip = jest.fn();
-const mockOnSelectTask = jest.fn();
-
-const defaultTrip: SortedTrip = {
-  displayTripId: '12345',
-  tripId: '12345',
-  status: 'pending',
-  sortedGroupOrder: ['store1', 'store2'],
-  tasksGroupByStoreId: {
-    store1: [{ taskId: 'task1' } as DeliveryTask],
-    store2: [{ taskId: 'task2' } as DeliveryTask],
+const mockTrips: SortedTrip[] = [
+  {
+    tripStartDateTime: moment().startOf('day').toISOString(),
+    tripEndDateTime: moment().endOf('day').toISOString(),
+    id: '1',
   },
-  tripStartDateTime: '2025-01-10T10:00:00Z',
-  tripEndDateTime: '2025-01-10T12:00:00Z',
-  uiTripStatusDisplayText: 'Pending',
-};
+  {
+    tripStartDateTime: moment().subtract(1, 'day').startOf('day').toISOString(),
+    tripEndDateTime: moment().subtract(1, 'day').endOf('day').toISOString(),
+    id: '2',
+  },
+  {
+    tripStartDateTime: moment().subtract(2, 'days').startOf('day').toISOString(),
+    tripEndDateTime: moment().subtract(2, 'days').endOf('day').toISOString(),
+    id: '3',
+  },
+];
 
-const renderComponent = (props = {}) =>
-  render(
-    <TripAccordion
-      trip={defaultTrip}
-      selectionMode={SelectionType.TRIP}
-      selectedTrip={null}
-      selectedTask={null}
-      onSelectTrip={mockOnSelectTrip}
-      onSelectTask={mockOnSelectTask}
-      defaultExpanded={false}
-      {...props}
-    />
-  );
-
-describe('TripAccordion Component', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  test('renders correctly with given trip data', () => {
-    renderComponent();
-
-    // Check for Trip ID
-    expect(screen.getByText('Trip# 12345')).toBeInTheDocument();
-
-    // Check for total orders
-    expect(screen.getByText('2 orders')).toBeInTheDocument();
-
-    // Check for date and time range
-    expect(screen.getByText('Jan 10, 2025')).toBeInTheDocument();
-    expect(screen.getByText('10:00 AM - 12:00 PM')).toBeInTheDocument();
-
-    // Check for status
-    expect(screen.getByText('Pending')).toBeInTheDocument();
-  });
-
-  test('renders task list for each store in sortedGroupOrder', () => {
-    renderComponent();
-
-    const taskLists = screen.getAllByTestId('task-list');
-    expect(taskLists).toHaveLength(2); // Two stores
-  });
-
-  test('calls onSelectTrip when the radio button is clicked', () => {
-    renderComponent();
-
-    const radioButton = screen.getByRole('radio');
-    fireEvent.click(radioButton);
-
-    expect(mockOnSelectTrip).toHaveBeenCalledWith(defaultTrip);
-  });
-
-  test('does not call onSelectTrip when radio button click is stopped', () => {
-    renderComponent();
-
-    const radioButton = screen.getByRole('radio');
-    fireEvent.click(radioButton, { stopPropagation: () => {} });
-
-    expect(mockOnSelectTrip).toHaveBeenCalled(); // Propagation is internal
-  });
-
-  test('expands accordion when defaultExpanded is true', () => {
-    renderComponent({ defaultExpanded: true });
-
-    const accordionDetails = screen.getByText('TaskList');
-    expect(accordionDetails).toBeVisible();
-  });
-
-  test('renders correctly in task selection mode', () => {
-    renderComponent({ selectionMode: SelectionType.TASK });
-
-    // Check that radio button is not rendered in TASK mode
-    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-  });
-
-  test('handles task selection via TaskList', () => {
-    renderComponent();
-
-    const taskList = screen.getByTestId('task-list');
-    fireEvent.click(taskList);
-
-    // Check that the mocked function is invoked correctly
-    expect(mockOnSelectTask).not.toHaveBeenCalled();
-  });
-
-  test('calls getTripTitleDate and formatDeliveryTimeRange with correct arguments', () => {
-    renderComponent();
-
-    expect(getTripTitleDate).toHaveBeenCalledWith(defaultTrip.tripEndDateTime, DATE_FORMAT_V1);
-    expect(formatDeliveryTimeRange).toHaveBeenCalledWith(
-      defaultTrip.tripStartDateTime,
-      defaultTrip.tripEndDateTime,
-      'US/Pacific'
+describe('usePaginatedTrips', () => {
+  it('should return paginated trips for the first page', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips(mockTrips, 1, 2)
     );
+
+    expect(result.current.todayTrips).toEqual([mockTrips[0]]);
+    expect(result.current.pastTrips).toEqual([mockTrips[1]]);
+    expect(result.current.totalPages).toBe(2);
+    expect(result.current.showTodayTripLabel).toBe(true);
+    expect(result.current.showPastTripLabel).toBe(true);
+  });
+
+  it('should return only today\'s trips if they fit on one page', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips([mockTrips[0]], 1, 2)
+    );
+
+    expect(result.current.todayTrips).toEqual([mockTrips[0]]);
+    expect(result.current.pastTrips).toEqual([]);
+    expect(result.current.totalPages).toBe(1);
+    expect(result.current.showTodayTripLabel).toBe(true);
+    expect(result.current.showPastTripLabel).toBe(false);
+  });
+
+  it('should return only past trips if today\'s trips do not fit on the page', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips(mockTrips, 2, 1)
+    );
+
+    expect(result.current.todayTrips).toEqual([]);
+    expect(result.current.pastTrips).toEqual([mockTrips[1]]);
+    expect(result.current.totalPages).toBe(3);
+    expect(result.current.showTodayTripLabel).toBe(false);
+    expect(result.current.showPastTripLabel).toBe(true);
+  });
+
+  it('should correctly handle pagination for multiple pages', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips(mockTrips, 2, 1)
+    );
+
+    expect(result.current.todayTrips).toEqual([]);
+    expect(result.current.pastTrips).toEqual([mockTrips[1]]);
+    expect(result.current.totalPages).toBe(3);
+    expect(result.current.showTodayTripLabel).toBe(false);
+    expect(result.current.showPastTripLabel).toBe(true);
+  });
+
+  it('should return no trips when given an empty list', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips([], 1, 2)
+    );
+
+    expect(result.current.todayTrips).toEqual([]);
+    expect(result.current.pastTrips).toEqual([]);
+    expect(result.current.totalPages).toBe(0);
+    expect(result.current.showTodayTripLabel).toBe(false);
+    expect(result.current.showPastTripLabel).toBe(false);
+  });
+
+  it('should handle trips on the edge of the pagination range', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips(mockTrips, 3, 1)
+    );
+
+    expect(result.current.todayTrips).toEqual([]);
+    expect(result.current.pastTrips).toEqual([mockTrips[2]]);
+    expect(result.current.totalPages).toBe(3);
+    expect(result.current.showTodayTripLabel).toBe(false);
+    expect(result.current.showPastTripLabel).toBe(true);
+  });
+
+  it('should handle exact pagination for all trips', () => {
+    const { result } = renderHook(() =>
+      usePaginatedTrips(mockTrips, 1, 3)
+    );
+
+    expect(result.current.todayTrips).toEqual([mockTrips[0]]);
+    expect(result.current.pastTrips).toEqual([mockTrips[1], mockTrips[2]]);
+    expect(result.current.totalPages).toBe(1);
+    expect(result.current.showTodayTripLabel).toBe(true);
+    expect(result.current.showPastTripLabel).toBe(false);
   });
 });
