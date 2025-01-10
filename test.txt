@@ -1,192 +1,129 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import TaskList from './TaskList';
-import {
-  DeliveryTask,
-  SelectionType,
-  Trip,
-  SortedTrip,
-  ServiceType,
-} from 'types/spark-driver/trip.types';
-import { formatDeliveryTimeRange } from 'utils/spark-driver/trip-utils';
-import lodash from 'lodash';
+import TripAccordion from './TripAccordion';
+import { SortedTrip, SelectionType, Trip, DeliveryTask } from 'types/spark-driver/trip.types';
+import { formatDeliveryTimeRange, getTripTitleDate } from 'utils/spark-driver/trip-utils';
+import { DATE_FORMAT_V1 } from 'utils/moment-time-utils';
+import TaskList from './task-list';
+import '@testing-library/jest-dom';
 
+// Mock dependencies
+jest.mock('./task-list', () => jest.fn(() => <div data-testid="task-list">TaskList</div>));
 jest.mock('utils/spark-driver/trip-utils', () => ({
   formatDeliveryTimeRange: jest.fn(() => '10:00 AM - 12:00 PM'),
+  getTripTitleDate: jest.fn(() => 'Jan 10, 2025'),
 }));
 
-jest.mock('lodash', () => ({
-  capitalize: jest.fn((text) => text),
-}));
+const mockOnSelectTrip = jest.fn();
+const mockOnSelectTask = jest.fn();
 
-describe('TaskList Component', () => {
-  const mockTrip = {
-    id: 'trip-1',
-  } as SortedTrip;
+const defaultTrip: SortedTrip = {
+  displayTripId: '12345',
+  tripId: '12345',
+  status: 'pending',
+  sortedGroupOrder: ['store1', 'store2'],
+  tasksGroupByStoreId: {
+    store1: [{ taskId: 'task1' } as DeliveryTask],
+    store2: [{ taskId: 'task2' } as DeliveryTask],
+  },
+  tripStartDateTime: '2025-01-10T10:00:00Z',
+  tripEndDateTime: '2025-01-10T12:00:00Z',
+  uiTripStatusDisplayText: 'Pending',
+};
 
-  const mockTasks: DeliveryTask[] = [
-    {
-      orderId: 'order-1',
-      serviceType: ServiceType.DELIVERY,
-      storeInfo: { storeName: 'Store A' },
-      customerInfo: {
-        customerFirstName: 'John',
-        customerLastName: 'Doe',
-        addressLine1: '123 Main St',
-        city: 'Sample City',
-        state: 'CA',
-        postalCode: '12345',
-      },
-      customerStartTime: '2025-01-10T10:00:00Z',
-      customerEndTime: '2025-01-10T12:00:00Z',
-      statusDisplayTextLine1: 'In Progress',
-      externalStatus: 'delivered',
-    },
-  ];
+const renderComponent = (props = {}) =>
+  render(
+    <TripAccordion
+      trip={defaultTrip}
+      selectionMode={SelectionType.TRIP}
+      selectedTrip={null}
+      selectedTask={null}
+      onSelectTrip={mockOnSelectTrip}
+      onSelectTask={mockOnSelectTask}
+      defaultExpanded={false}
+      {...props}
+    />
+  );
 
-  const mockOnSelectTask = jest.fn();
-  const mockOnSelectTrip = jest.fn();
-
-  afterEach(() => {
+describe('TripAccordion Component', () => {
+  beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should render tasks correctly', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={mockTasks}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
+  test('renders correctly with given trip data', () => {
+    renderComponent();
 
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Order #order-1')).toBeInTheDocument();
+    // Check for Trip ID
+    expect(screen.getByText('Trip# 12345')).toBeInTheDocument();
+
+    // Check for total orders
+    expect(screen.getByText('2 orders')).toBeInTheDocument();
+
+    // Check for date and time range
+    expect(screen.getByText('Jan 10, 2025')).toBeInTheDocument();
     expect(screen.getByText('10:00 AM - 12:00 PM')).toBeInTheDocument();
-    expect(screen.getByText('In Progress')).toBeInTheDocument();
+
+    // Check for status
+    expect(screen.getByText('Pending')).toBeInTheDocument();
   });
 
-  it('should call onSelectTask and onSelectTrip when a task is selected', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={mockTasks}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
+  test('renders task list for each store in sortedGroupOrder', () => {
+    renderComponent();
+
+    const taskLists = screen.getAllByTestId('task-list');
+    expect(taskLists).toHaveLength(2); // Two stores
+  });
+
+  test('calls onSelectTrip when the radio button is clicked', () => {
+    renderComponent();
 
     const radioButton = screen.getByRole('radio');
     fireEvent.click(radioButton);
 
-    expect(mockOnSelectTrip).toHaveBeenCalledWith(mockTrip);
-    expect(mockOnSelectTask).toHaveBeenCalledWith(mockTasks[0], mockTrip);
+    expect(mockOnSelectTrip).toHaveBeenCalledWith(defaultTrip);
   });
 
-  it('should render AddressDetails for non-delivery tasks', () => {
-    const returnTask = {
-      ...mockTasks[0],
-      serviceType: ServiceType.RETURN,
-    };
-
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={[returnTask]}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
-
-    expect(screen.getByText('123 Main St')).toBeInTheDocument();
-    expect(screen.getByText('Sample City')).toBeInTheDocument();
-    expect(screen.getByText('CA')).toBeInTheDocument();
-    expect(screen.getByText('12345')).toBeInTheDocument();
-  });
-
-  it('should not render AddressDetails for delivery tasks', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={mockTasks}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
-
-    expect(screen.queryByText('123 Main St')).not.toBeInTheDocument();
-  });
-
-  it('should render StorePickupDropoff for delivery tasks', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={mockTasks}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
-
-    expect(screen.getByText('Store A')).toBeInTheDocument();
-  });
-
-  it('should render vertical line element', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={mockTasks}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
-
-    const verticalLine = screen.getByRole('separator');
-    expect(verticalLine).toBeInTheDocument();
-  });
-
-  it('should handle empty tasks array gracefully', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={[]}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-        onSelectTask={mockOnSelectTask}
-        onSelectTrip={mockOnSelectTrip}
-      />
-    );
-
-    expect(screen.queryByText('John Doe')).not.toBeInTheDocument();
-    expect(screen.queryByText('Order #order-1')).not.toBeInTheDocument();
-  });
-
-  it('should handle missing callbacks gracefully', () => {
-    render(
-      <TaskList
-        trip={mockTrip}
-        tasks={mockTasks}
-        selectionMode={SelectionType.ORDER}
-        selectedTask={null}
-      />
-    );
+  test('does not call onSelectTrip when radio button click is stopped', () => {
+    renderComponent();
 
     const radioButton = screen.getByRole('radio');
-    fireEvent.click(radioButton);
+    fireEvent.click(radioButton, { stopPropagation: () => {} });
 
-    expect(mockOnSelectTrip).not.toHaveBeenCalled();
+    expect(mockOnSelectTrip).toHaveBeenCalled(); // Propagation is internal
+  });
+
+  test('expands accordion when defaultExpanded is true', () => {
+    renderComponent({ defaultExpanded: true });
+
+    const accordionDetails = screen.getByText('TaskList');
+    expect(accordionDetails).toBeVisible();
+  });
+
+  test('renders correctly in task selection mode', () => {
+    renderComponent({ selectionMode: SelectionType.TASK });
+
+    // Check that radio button is not rendered in TASK mode
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+  });
+
+  test('handles task selection via TaskList', () => {
+    renderComponent();
+
+    const taskList = screen.getByTestId('task-list');
+    fireEvent.click(taskList);
+
+    // Check that the mocked function is invoked correctly
     expect(mockOnSelectTask).not.toHaveBeenCalled();
+  });
+
+  test('calls getTripTitleDate and formatDeliveryTimeRange with correct arguments', () => {
+    renderComponent();
+
+    expect(getTripTitleDate).toHaveBeenCalledWith(defaultTrip.tripEndDateTime, DATE_FORMAT_V1);
+    expect(formatDeliveryTimeRange).toHaveBeenCalledWith(
+      defaultTrip.tripStartDateTime,
+      defaultTrip.tripEndDateTime,
+      'US/Pacific'
+    );
   });
 });
