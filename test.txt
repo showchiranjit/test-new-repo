@@ -1,128 +1,192 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import DeliveryMapWidget from './DeliveryMapWidget';
-import { Context } from 'context';
+import TaskList from './TaskList';
+import {
+  DeliveryTask,
+  SelectionType,
+  Trip,
+  SortedTrip,
+  ServiceType,
+} from 'types/spark-driver/trip.types';
+import { formatDeliveryTimeRange } from 'utils/spark-driver/trip-utils';
+import lodash from 'lodash';
 
-// Mock the Google Maps API
-global.google = {
-  maps: {
-    Map: jest.fn(),
-    LatLng: jest.fn((lat, lng) => ({ lat, lng })),
-    LatLngBounds: jest.fn(() => ({
-      extend: jest.fn(),
-      contains: jest.fn(),
-    })),
-    Marker: jest.fn(),
-    Circle: jest.fn(),
-    Polyline: jest.fn(),
-    geometry: {
-      spherical: {
-        computeDistanceBetween: jest.fn(() => 1000), // Mock distance calculation
-      },
-      encoding: {
-        decodePath: jest.fn(() => [
-          { lat: 37.7749, lng: -122.4194 },
-          { lat: 37.8044, lng: -122.2711 },
-        ]),
-      },
-    },
-  },
-};
-
-// Mock React Google Maps Library
-jest.mock('@react-google-maps/api', () => ({
-  useJsApiLoader: () => ({ isLoaded: true }),
-  GoogleMap: ({ children }) => <div data-testid="google-map">{children}</div>,
-  MarkerF: () => <div data-testid="marker"></div>,
-  Circle: () => <div data-testid="circle"></div>,
-  Polyline: () => <div data-testid="polyline"></div>,
+jest.mock('utils/spark-driver/trip-utils', () => ({
+  formatDeliveryTimeRange: jest.fn(() => '10:00 AM - 12:00 PM'),
 }));
 
-// Mock utility functions
-jest.mock('utils/spark-driver/delivery-map.utils', () => ({
-  getStoreCustomerAndCurrentStopLocation: jest.fn(() => ({
-    storeLocation: { location: { latLong: { lat: 37.7749, lng: -122.4194 } } },
-    customerLocation: { location: { latLong: { lat: 37.8044, lng: -122.2711 } } },
-    currentStop: { location: { latLong: { lat: 37.7888, lng: -122.4 } }, id: 'stop1' },
-  })),
+jest.mock('lodash', () => ({
+  capitalize: jest.fn((text) => text),
 }));
 
-describe('DeliveryMapWidget', () => {
-  const mockDispatch = jest.fn();
+describe('TaskList Component', () => {
+  const mockTrip = {
+    id: 'trip-1',
+  } as SortedTrip;
 
-  const mockContextValue = {
-    state: {
-      sparkDriver: {
-        selectedTask: { id: 'task1', orderId: 'order1' },
-        selectedTrip: { tripId: 'trip1' },
+  const mockTasks: DeliveryTask[] = [
+    {
+      orderId: 'order-1',
+      serviceType: ServiceType.DELIVERY,
+      storeInfo: { storeName: 'Store A' },
+      customerInfo: {
+        customerFirstName: 'John',
+        customerLastName: 'Doe',
+        addressLine1: '123 Main St',
+        city: 'Sample City',
+        state: 'CA',
+        postalCode: '12345',
       },
+      customerStartTime: '2025-01-10T10:00:00Z',
+      customerEndTime: '2025-01-10T12:00:00Z',
+      statusDisplayTextLine1: 'In Progress',
+      externalStatus: 'delivered',
     },
-    dispatch: mockDispatch,
-  };
+  ];
 
-  beforeEach(() => {
-    jest.clearAllMocks(); // Clear mocks before each test
+  const mockOnSelectTask = jest.fn();
+  const mockOnSelectTrip = jest.fn();
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('renders the DeliveryMapWidget component', () => {
+  it('should render tasks correctly', () => {
     render(
-      <Context.Provider value={mockContextValue}>
-        <DeliveryMapWidget />
-      </Context.Provider>
+      <TaskList
+        trip={mockTrip}
+        tasks={mockTasks}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
     );
 
-    expect(screen.getByText("Driver's Location")).toBeInTheDocument();
-    expect(screen.getByTestId('google-map')).toBeInTheDocument();
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('Order #order-1')).toBeInTheDocument();
+    expect(screen.getByText('10:00 AM - 12:00 PM')).toBeInTheDocument();
+    expect(screen.getByText('In Progress')).toBeInTheDocument();
   });
 
-  it('shows a loading spinner when map is not loaded', () => {
-    jest.mock('@react-google-maps/api', () => ({
-      useJsApiLoader: () => ({ isLoaded: false }),
-    }));
-
+  it('should call onSelectTask and onSelectTrip when a task is selected', () => {
     render(
-      <Context.Provider value={mockContextValue}>
-        <DeliveryMapWidget />
-      </Context.Provider>
+      <TaskList
+        trip={mockTrip}
+        tasks={mockTasks}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
     );
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    const radioButton = screen.getByRole('radio');
+    fireEvent.click(radioButton);
+
+    expect(mockOnSelectTrip).toHaveBeenCalledWith(mockTrip);
+    expect(mockOnSelectTask).toHaveBeenCalledWith(mockTasks[0], mockTrip);
   });
 
-  it('calls refreshMap when the refresh button is clicked', () => {
+  it('should render AddressDetails for non-delivery tasks', () => {
+    const returnTask = {
+      ...mockTasks[0],
+      serviceType: ServiceType.RETURN,
+    };
+
     render(
-      <Context.Provider value={mockContextValue}>
-        <DeliveryMapWidget />
-      </Context.Provider>
+      <TaskList
+        trip={mockTrip}
+        tasks={[returnTask]}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
     );
 
-    const refreshButton = screen.getByRole('button', { name: /refresh map/i });
-    fireEvent.click(refreshButton);
-
-    expect(mockDispatch).toHaveBeenCalledWith(expect.any(Function));
+    expect(screen.getByText('123 Main St')).toBeInTheDocument();
+    expect(screen.getByText('Sample City')).toBeInTheDocument();
+    expect(screen.getByText('CA')).toBeInTheDocument();
+    expect(screen.getByText('12345')).toBeInTheDocument();
   });
 
-  it('renders store, customer, and driver markers when locations are available', () => {
+  it('should not render AddressDetails for delivery tasks', () => {
     render(
-      <Context.Provider value={mockContextValue}>
-        <DeliveryMapWidget />
-      </Context.Provider>
+      <TaskList
+        trip={mockTrip}
+        tasks={mockTasks}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
     );
 
-    expect(screen.getAllByTestId('marker')).toHaveLength(2); // Store and Customer markers
+    expect(screen.queryByText('123 Main St')).not.toBeInTheDocument();
   });
 
-  it('updates geofence status based on driver location', () => {
-    const mockComputeDistanceBetween = jest.fn(() => 500); // Driver within geofence
-    global.google.maps.geometry.spherical.computeDistanceBetween = mockComputeDistanceBetween;
-
+  it('should render StorePickupDropoff for delivery tasks', () => {
     render(
-      <Context.Provider value={mockContextValue}>
-        <DeliveryMapWidget />
-      </Context.Provider>
+      <TaskList
+        trip={mockTrip}
+        tasks={mockTasks}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
     );
 
-    expect(mockComputeDistanceBetween).toHaveBeenCalled();
-    // Expect the geofence circle to use the 'green' stroke color
+    expect(screen.getByText('Store A')).toBeInTheDocument();
+  });
+
+  it('should render vertical line element', () => {
+    render(
+      <TaskList
+        trip={mockTrip}
+        tasks={mockTasks}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
+    );
+
+    const verticalLine = screen.getByRole('separator');
+    expect(verticalLine).toBeInTheDocument();
+  });
+
+  it('should handle empty tasks array gracefully', () => {
+    render(
+      <TaskList
+        trip={mockTrip}
+        tasks={[]}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+        onSelectTask={mockOnSelectTask}
+        onSelectTrip={mockOnSelectTrip}
+      />
+    );
+
+    expect(screen.queryByText('John Doe')).not.toBeInTheDocument();
+    expect(screen.queryByText('Order #order-1')).not.toBeInTheDocument();
+  });
+
+  it('should handle missing callbacks gracefully', () => {
+    render(
+      <TaskList
+        trip={mockTrip}
+        tasks={mockTasks}
+        selectionMode={SelectionType.ORDER}
+        selectedTask={null}
+      />
+    );
+
+    const radioButton = screen.getByRole('radio');
+    fireEvent.click(radioButton);
+
+    expect(mockOnSelectTrip).not.toHaveBeenCalled();
+    expect(mockOnSelectTask).not.toHaveBeenCalled();
   });
 });
