@@ -1,19 +1,46 @@
+export const getDeliveryType = (order: any): string => {
+  if (!order) return "Unknown Delivery Type";
 
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(payload)
-            });
+  const deliveryMapping: { [key: string]: (order: any) => boolean } = {
+    "Unscheduled GMD": (order) => order.deliveryType === "UNSLOTTED",
+    "Shopper Scheduled Delivery With Alcohol": (order) =>
+      order.deliveryType === "SLOTTED" &&
+      order.pickResourcePool === "SHOPPER" &&
+      order.hasAlcohol,
+    "Shopper Scheduled Delivery Without Alcohol": (order) =>
+      order.deliveryType === "SLOTTED" &&
+      order.pickResourcePool === "SHOPPER" &&
+      !order.hasAlcohol,
+    "Regular Scheduled Delivery With Alcohol": (order) =>
+      order.deliveryType === "SLOTTED" &&
+      order.pickResourcePool !== "SHOPPER" &&
+      order.hasAlcohol,
+    "Regular Scheduled Delivery Without Alcohol": (order) =>
+      order.deliveryType === "SLOTTED" &&
+      order.pickResourcePool !== "SHOPPER" &&
+      !order.hasAlcohol,
+    "Spark Shop & Deliver": (order) => order.pickResourcePool === "SHOPPER",
+    "Express Delivery": (order) =>
+      order.deliveryPriority === "EXPRESS" && order.pickResourcePool !== "SHOPPER",
+    "Shopper Express Delivery With Alcohol": (order) =>
+      order.deliveryPriority === "EXPRESS" &&
+      order.pickResourcePool === "SHOPPER" &&
+      order.hasAlcohol,
+    "Shopper Express Delivery Without Alcohol": (order) =>
+      order.deliveryPriority === "EXPRESS" &&
+      order.pickResourcePool === "SHOPPER" &&
+      !order.hasAlcohol,
+    "Customer Returns": (order) => order.serviceType === "CUSTOMER RETURNS",
+    "Black Friday": (order) => order.specialHandling === "ANNUAL EVENT DELIVERY",
+    "Internalized Parcel": (order) => order.parcelDelivery === "IP_ORDER",
+    "Pharmacy Delivery": (order) =>
+      order.hasPharmacy || order.containsPharmacy,
+  };
 
-            if (!response.ok) {
-                throw new Error('Network response was not ok ' + response.statusText);
-            }
+  // Find the first matching delivery type
+  for (const [deliveryType, condition] of Object.entries(deliveryMapping)) {
+    if (condition(order)) return deliveryType;
+  }
 
-            const data = await response.json();
-            setSuccess('Order posted successfully!');
-            console.log('Order posted successfully:', data);
-        } catch (error) {
-            setError('Error posting order: ' + error.message);
-            console.error('Error posting order:', error);
-        }
+  return "Unknown Delivery Type";
+};
