@@ -1,46 +1,9 @@
-export const getDeliveryType = (order: any): string => {
-  if (!order) return "Unknown Delivery Type";
+1. Fallback image scenario: Delivery Map widget, store/customer icon
 
-  const deliveryMapping: { [key: string]: (order: any) => boolean } = {
-    "Unscheduled GMD": (order) => order.deliveryType === "UNSLOTTED",
-    "Shopper Scheduled Delivery With Alcohol": (order) =>
-      order.deliveryType === "SLOTTED" &&
-      order.pickResourcePool === "SHOPPER" &&
-      order.hasAlcohol,
-    "Shopper Scheduled Delivery Without Alcohol": (order) =>
-      order.deliveryType === "SLOTTED" &&
-      order.pickResourcePool === "SHOPPER" &&
-      !order.hasAlcohol,
-    "Regular Scheduled Delivery With Alcohol": (order) =>
-      order.deliveryType === "SLOTTED" &&
-      order.pickResourcePool !== "SHOPPER" &&
-      order.hasAlcohol,
-    "Regular Scheduled Delivery Without Alcohol": (order) =>
-      order.deliveryType === "SLOTTED" &&
-      order.pickResourcePool !== "SHOPPER" &&
-      !order.hasAlcohol,
-    "Spark Shop & Deliver": (order) => order.pickResourcePool === "SHOPPER",
-    "Express Delivery": (order) =>
-      order.deliveryPriority === "EXPRESS" && order.pickResourcePool !== "SHOPPER",
-    "Shopper Express Delivery With Alcohol": (order) =>
-      order.deliveryPriority === "EXPRESS" &&
-      order.pickResourcePool === "SHOPPER" &&
-      order.hasAlcohol,
-    "Shopper Express Delivery Without Alcohol": (order) =>
-      order.deliveryPriority === "EXPRESS" &&
-      order.pickResourcePool === "SHOPPER" &&
-      !order.hasAlcohol,
-    "Customer Returns": (order) => order.serviceType === "CUSTOMER RETURNS",
-    "Black Friday": (order) => order.specialHandling === "ANNUAL EVENT DELIVERY",
-    "Internalized Parcel": (order) => order.parcelDelivery === "IP_ORDER",
-    "Pharmacy Delivery": (order) =>
-      order.hasPharmacy || order.containsPharmacy,
-  };
+2. Prepopulation of the app version and OS is required for escalated tech prod? Business verification is required?
 
-  // Find the first matching delivery type
-  for (const [deliveryType, condition] of Object.entries(deliveryMapping)) {
-    if (condition(order)) return deliveryType;
-  }
+3. Must add shopper before driver change 
 
-  return "Unknown Delivery Type";
-};
+4. Geofence delivery threshold  api , fallback scenario
+
+5. Trip status need to be updated , when force complete return by agent ?	
