@@ -1,9 +1,216 @@
-1. Fallback image scenario: Delivery Map widget, store/customer icon
+import React from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import ContactTimeline from "./ContactTimeline";
+import { Context, GlobalContext } from "context";
+import { Router } from "next/router";
+import useIncidentTransfer from "commons/hooks/use-incident-transfer";
+import IncidentAttachments from "components/spark-driver/incident-attachments/incident-attachments";
+import AssignmentTimeline from "./assignment-timeline";
 
-2. Prepopulation of the app version and OS is required for escalated tech prod? Business verification is required?
+// Mock the components and hooks
+jest.mock("next/router", () => ({
+  push: jest.fn(),
+  replace: jest.fn(),
+}));
 
-3. Must add shopper before driver change 
+jest.mock("commons/hooks/use-incident-transfer", () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
 
-4. Geofence delivery threshold  api , fallback scenario
+jest.mock("components/spark-driver/incident-attachments/incident-attachments", () => ({
+  __esModule: true,
+  default: jest.fn(() => <div>Mocked IncidentAttachments</div>),
+}));
 
-5. Trip status need to be updated , when force complete return by agent ?	
+jest.mock("./assignment-timeline", () => ({
+  __esModule: true,
+  default: jest.fn(() => <div>Mocked AssignmentTimeline</div>),
+}));
+
+const mockIncident = {
+  id: "123",
+  status: "OPEN",
+  customer: {
+    firstName: "John",
+    lastName: "Doe",
+  },
+  contact: {
+    category: {
+      reasonDesc: "Order Issue",
+    },
+  },
+  events: [
+    {
+      eventAttributes: {
+        orderId: "ORDER123",
+        displayTripId: "TRIP123",
+      },
+      createdDate: "2023-10-01T12:00:00Z",
+    },
+  ],
+  attachments: [
+    {
+      id: "1",
+      name: "attachment1.png",
+    },
+  ],
+};
+
+const mockContextValue = {
+  state: {
+    incidentGCState: {
+      incident: mockIncident,
+    },
+  },
+};
+
+describe("ContactTimeline", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useIncidentTransfer.mockReturnValue({
+      onTransfer: jest.fn(),
+    });
+  });
+
+  it("renders the component with all sections", () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    expect(screen.getByText("Review John Doe's ongoing issue")).toBeInTheDocument();
+    expect(screen.getByText("Hi John Doe, thank you for contacting Spark Driver support.")).toBeInTheDocument();
+    expect(screen.getByText("I see you need help with Order Issue")).toBeInTheDocument();
+    expect(screen.getByText("Order: ORDER123, Trip: TRIP123, Date: 10/01/2023")).toBeInTheDocument();
+    expect(screen.getByText("Contact timeline")).toBeInTheDocument();
+    expect(screen.getByText("Mocked IncidentAttachments")).toBeInTheDocument();
+    expect(screen.getByText("Mocked AssignmentTimeline")).toBeInTheDocument();
+    expect(screen.getByText("Proceed to workflow")).toBeInTheDocument();
+    expect(screen.getByText("End Contact")).toBeInTheDocument();
+  });
+
+  it("renders the Back to Home button when incident status is CLOSED", () => {
+    const closedIncident = { ...mockIncident, status: "CLOSED" };
+    const closedContextValue = {
+      state: {
+        incidentGCState: {
+          incident: closedIncident,
+        },
+      },
+    };
+
+    render(
+      <Context.Provider value={closedContextValue}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    expect(screen.getByText("Back to Home")).toBeInTheDocument();
+    expect(screen.queryByText("Proceed to workflow")).not.toBeInTheDocument();
+    expect(screen.queryByText("End Contact")).not.toBeInTheDocument();
+  });
+
+  it("calls Router.push when Back to Home button is clicked", () => {
+    const closedIncident = { ...mockIncident, status: "CLOSED" };
+    const closedContextValue = {
+      state: {
+        incidentGCState: {
+          incident: closedIncident,
+        },
+      },
+    };
+
+    render(
+      <Context.Provider value={closedContextValue}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    fireEvent.click(screen.getByText("Back to Home"));
+    expect(Router.push).toHaveBeenCalledWith(HOME_PAGE_ROUTE);
+  });
+
+  it("calls Router.replace when Proceed to workflow button is clicked", () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    fireEvent.click(screen.getByText("Proceed to workflow"));
+    expect(Router.replace).toHaveBeenCalledWith(`${window.location.href}?proceed=true`);
+  });
+
+  it("calls onTransfer when End Contact button is clicked", () => {
+    const { onTransfer } = useIncidentTransfer();
+    render(
+      <Context.Provider value={mockContextValue}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    fireEvent.click(screen.getByText("End Contact"));
+    expect(onTransfer).toHaveBeenCalledWith(null);
+  });
+
+  it("does not render contact reason if it is not available", () => {
+    const incidentWithoutReason = { ...mockIncident, contact: { category: {} } };
+    const contextValueWithoutReason = {
+      state: {
+        incidentGCState: {
+          incident: incidentWithoutReason,
+        },
+      },
+    };
+
+    render(
+      <Context.Provider value={contextValueWithoutReason}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    expect(screen.queryByText("I see you need help with")).not.toBeInTheDocument();
+  });
+
+  it("does not render event details if relevant event does not have DSAttributes", () => {
+    const incidentWithoutDSAttributes = { ...mockIncident, events: [] };
+    const contextValueWithoutDSAttributes = {
+      state: {
+        incidentGCState: {
+          incident: incidentWithoutDSAttributes,
+        },
+      },
+    };
+
+    render(
+      <Context.Provider value={contextValueWithoutDSAttributes}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    expect(screen.queryByText("Order:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Trip:")).not.toBeInTheDocument();
+    expect(screen.queryByText("Date:")).not.toBeInTheDocument();
+  });
+
+  it("does not render IncidentAttachments if incident has no attachments", () => {
+    const incidentWithoutAttachments = { ...mockIncident, attachments: [] };
+    const contextValueWithoutAttachments = {
+      state: {
+        incidentGCState: {
+          incident: incidentWithoutAttachments,
+        },
+      },
+    };
+
+    render(
+      <Context.Provider value={contextValueWithoutAttachments}>
+        <ContactTimeline />
+      </Context.Provider>
+    );
+
+    expect(screen.queryByText("Mocked IncidentAttachments")).not.toBeInTheDocument();
+  });
+});
