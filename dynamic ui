@@ -1,216 +1,249 @@
-import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import ContactTimeline from "./ContactTimeline";
-import { Context, GlobalContext } from "context";
-import { Router } from "next/router";
-import useIncidentTransfer from "commons/hooks/use-incident-transfer";
-import IncidentAttachments from "components/spark-driver/incident-attachments/incident-attachments";
-import AssignmentTimeline from "./assignment-timeline";
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import AssignmentTimeline from './AssignmentTimeline';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import SdsContactSummary from 'components/contact-summary/contact-summary-templates/spark-driver/sds-contact-summary';
+import { mapAssignments } from 'utils/spark-driver/contact-timeline.utils';
+import { formatDateWithTimeZone } from 'utils/moment-time-utils';
+import { IncidentObject } from 'types/incident.types';
 
-// Mock the components and hooks
-jest.mock("next/router", () => ({
-  push: jest.fn(),
-  replace: jest.fn(),
-}));
-
-jest.mock("commons/hooks/use-incident-transfer", () => ({
+// Mock external components and utilities
+jest.mock('@mui/material/Accordion', () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: jest.fn(({ children, onChange, defaultExpanded, id, className }) => (
+    <div data-testid="accordion" className={className} id={id} onClick={onChange}>
+      {children}
+    </div>
+  )),
 }));
 
-jest.mock("components/spark-driver/incident-attachments/incident-attachments", () => ({
+jest.mock('@mui/material/AccordionDetails', () => ({
   __esModule: true,
-  default: jest.fn(() => <div>Mocked IncidentAttachments</div>),
+  default: jest.fn(({ children }) => <div data-testid="accordion-details">{children}</div>),
 }));
 
-jest.mock("./assignment-timeline", () => ({
+jest.mock('@mui/material/AccordionSummary', () => ({
   __esModule: true,
-  default: jest.fn(() => <div>Mocked AssignmentTimeline</div>),
+  default: jest.fn(({ children, expandIcon }) => (
+    <div data-testid="accordion-summary">
+      {children}
+      {expandIcon}
+    </div>
+  )),
 }));
 
-const mockIncident = {
-  id: "123",
-  status: "OPEN",
-  customer: {
-    firstName: "John",
-    lastName: "Doe",
-  },
-  contact: {
-    category: {
-      reasonDesc: "Order Issue",
-    },
-  },
-  events: [
-    {
-      eventAttributes: {
-        orderId: "ORDER123",
-        displayTripId: "TRIP123",
+jest.mock('components/contact-summary/contact-summary-templates/spark-driver/sds-contact-summary', () => ({
+  __esModule: true,
+  default: jest.fn(({ events }) => <div data-testid="sds-contact-summary">{events.length} events</div>),
+}));
+
+jest.mock('utils/spark-driver/contact-timeline.utils', () => ({
+  mapAssignments: jest.fn(),
+}));
+
+jest.mock('utils/moment-time-utils', () => ({
+  formatDateWithTimeZone: jest.fn(),
+}));
+
+describe('AssignmentTimeline', () => {
+  const mockIncident: IncidentObject = {
+    assignments: [
+      {
+        assignedDate: '2023-10-01T12:00:00Z',
+        agent: {
+          userName: 'johnDoe',
+        },
       },
-      createdDate: "2023-10-01T12:00:00Z",
-    },
-  ],
-  attachments: [
+    ],
+    events: [
+      {
+        eventDate: '2023-10-01T12:00:00Z',
+        eventType: 'CALL',
+      },
+    ],
+  };
+
+  const mockMappedAssignments = [
     {
-      id: "1",
-      name: "attachment1.png",
+      assignment: mockIncident.assignments[0],
+      events: mockIncident.events,
+      reason: 'Test Reason',
     },
-  ],
-};
+  ];
 
-const mockContextValue = {
-  state: {
-    incidentGCState: {
-      incident: mockIncident,
-    },
-  },
-};
-
-describe("ContactTimeline", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    useIncidentTransfer.mockReturnValue({
-      onTransfer: jest.fn(),
-    });
+    (mapAssignments as jest.Mock).mockReturnValue(mockMappedAssignments);
+    (formatDateWithTimeZone as jest.Mock).mockReturnValue('2023-10-01 12:00 PM');
   });
 
-  it("renders the component with all sections", () => {
-    render(
-      <Context.Provider value={mockContextValue}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
+  it('renders the component with initial state', () => {
+    render(<AssignmentTimeline incident={mockIncident} />);
 
-    expect(screen.getByText("Review John Doe's ongoing issue")).toBeInTheDocument();
-    expect(screen.getByText("Hi John Doe, thank you for contacting Spark Driver support.")).toBeInTheDocument();
-    expect(screen.getByText("I see you need help with Order Issue")).toBeInTheDocument();
-    expect(screen.getByText("Order: ORDER123, Trip: TRIP123, Date: 10/01/2023")).toBeInTheDocument();
-    expect(screen.getByText("Contact timeline")).toBeInTheDocument();
-    expect(screen.getByText("Mocked IncidentAttachments")).toBeInTheDocument();
-    expect(screen.getByText("Mocked AssignmentTimeline")).toBeInTheDocument();
-    expect(screen.getByText("Proceed to workflow")).toBeInTheDocument();
-    expect(screen.getByText("End Contact")).toBeInTheDocument();
+    // Check if the Accordion is rendered
+    expect(screen.getByTestId('accordion')).toBeInTheDocument();
+
+    // Check if the AccordionSummary is rendered with the correct content
+    expect(screen.getByTestId('accordion-summary')).toBeInTheDocument();
+    expect(screen.getByText('Test Reason')).toBeInTheDocument();
+    expect(screen.getByText('johnDoe')).toBeInTheDocument();
+    expect(screen.getByText('2023-10-01 12:00 PM')).toBeInTheDocument();
+
+    // Check if the AccordionDetails is rendered with the correct content
+    expect(screen.getByTestId('accordion-details')).toBeInTheDocument();
+    expect(screen.getByTestId('sds-contact-summary')).toBeInTheDocument();
+    expect(screen.getByText('1 events')).toBeInTheDocument();
   });
 
-  it("renders the Back to Home button when incident status is CLOSED", () => {
-    const closedIncident = { ...mockIncident, status: "CLOSED" };
-    const closedContextValue = {
-      state: {
-        incidentGCState: {
-          incident: closedIncident,
+  it('handles accordion expansion and collapse', () => {
+    render(<AssignmentTimeline incident={mockIncident} />);
+
+    // Initially, the first accordion should be expanded
+    const accordion = screen.getByTestId('accordion');
+    expect(accordion).toHaveAttribute('aria-expanded', 'true');
+
+    // Simulate clicking on the accordion to collapse it
+    fireEvent.click(accordion);
+    expect(accordion).toHaveAttribute('aria-expanded', 'false');
+
+    // Simulate clicking on the accordion again to expand it
+    fireEvent.click(accordion);
+    expect(accordion).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('renders multiple assignments correctly', () => {
+    const multipleAssignmentsIncident: IncidentObject = {
+      assignments: [
+        {
+          assignedDate: '2023-10-01T12:00:00Z',
+          agent: {
+            userName: 'johnDoe',
+          },
         },
-      },
+        {
+          assignedDate: '2023-10-02T12:00:00Z',
+          agent: {
+            userName: 'janeDoe',
+          },
+        },
+      ],
+      events: [
+        {
+          eventDate: '2023-10-01T12:00:00Z',
+          eventType: 'CALL',
+        },
+        {
+          eventDate: '2023-10-02T12:00:00Z',
+          eventType: 'EMAIL',
+        },
+      ],
     };
 
-    render(
-      <Context.Provider value={closedContextValue}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
+    const mockMappedAssignmentsMultiple = [
+      {
+        assignment: multipleAssignmentsIncident.assignments[0],
+        events: multipleAssignmentsIncident.events,
+        reason: 'Test Reason 1',
+      },
+      {
+        assignment: multipleAssignmentsIncident.assignments[1],
+        events: multipleAssignmentsIncident.events,
+        reason: 'Test Reason 2',
+      },
+    ];
 
-    expect(screen.getByText("Back to Home")).toBeInTheDocument();
-    expect(screen.queryByText("Proceed to workflow")).not.toBeInTheDocument();
-    expect(screen.queryByText("End Contact")).not.toBeInTheDocument();
+    (mapAssignments as jest.Mock).mockReturnValue(mockMappedAssignmentsMultiple);
+
+    render(<AssignmentTimeline incident={multipleAssignmentsIncident} />);
+
+    // Check if both assignments are rendered
+    expect(screen.getAllByTestId('accordion')).toHaveLength(2);
+    expect(screen.getByText('Test Reason 1')).toBeInTheDocument();
+    expect(screen.getByText('Test Reason 2')).toBeInTheDocument();
   });
 
-  it("calls Router.push when Back to Home button is clicked", () => {
-    const closedIncident = { ...mockIncident, status: "CLOSED" };
-    const closedContextValue = {
-      state: {
-        incidentGCState: {
-          incident: closedIncident,
+  it('renders the correct user initials', () => {
+    render(<AssignmentTimeline incident={mockIncident} />);
+
+    // Check if the user initials are rendered correctly
+    expect(screen.getByText('JD')).toBeInTheDocument();
+  });
+
+  it('renders the correct date format', () => {
+    render(<AssignmentTimeline incident={mockIncident} />);
+
+    // Check if the date is formatted correctly
+    expect(screen.getByText('2023-10-01 12:00 PM')).toBeInTheDocument();
+  });
+
+  it('renders the correct number of events in the contact summary', () => {
+    render(<AssignmentTimeline incident={mockIncident} />);
+
+    // Check if the correct number of events is rendered in the contact summary
+    expect(screen.getByText('1 events')).toBeInTheDocument();
+  });
+
+  it('renders the vertical line between assignments', () => {
+    const multipleAssignmentsIncident: IncidentObject = {
+      assignments: [
+        {
+          assignedDate: '2023-10-01T12:00:00Z',
+          agent: {
+            userName: 'johnDoe',
+          },
         },
-      },
+        {
+          assignedDate: '2023-10-02T12:00:00Z',
+          agent: {
+            userName: 'janeDoe',
+          },
+        },
+      ],
+      events: [
+        {
+          eventDate: '2023-10-01T12:00:00Z',
+          eventType: 'CALL',
+        },
+        {
+          eventDate: '2023-10-02T12:00:00Z',
+          eventType: 'EMAIL',
+        },
+      ],
     };
 
-    render(
-      <Context.Provider value={closedContextValue}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
-
-    fireEvent.click(screen.getByText("Back to Home"));
-    expect(Router.push).toHaveBeenCalledWith(HOME_PAGE_ROUTE);
-  });
-
-  it("calls Router.replace when Proceed to workflow button is clicked", () => {
-    render(
-      <Context.Provider value={mockContextValue}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
-
-    fireEvent.click(screen.getByText("Proceed to workflow"));
-    expect(Router.replace).toHaveBeenCalledWith(`${window.location.href}?proceed=true`);
-  });
-
-  it("calls onTransfer when End Contact button is clicked", () => {
-    const { onTransfer } = useIncidentTransfer();
-    render(
-      <Context.Provider value={mockContextValue}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
-
-    fireEvent.click(screen.getByText("End Contact"));
-    expect(onTransfer).toHaveBeenCalledWith(null);
-  });
-
-  it("does not render contact reason if it is not available", () => {
-    const incidentWithoutReason = { ...mockIncident, contact: { category: {} } };
-    const contextValueWithoutReason = {
-      state: {
-        incidentGCState: {
-          incident: incidentWithoutReason,
-        },
+    const mockMappedAssignmentsMultiple = [
+      {
+        assignment: multipleAssignmentsIncident.assignments[0],
+        events: multipleAssignmentsIncident.events,
+        reason: 'Test Reason 1',
       },
+      {
+        assignment: multipleAssignmentsIncident.assignments[1],
+        events: multipleAssignmentsIncident.events,
+        reason: 'Test Reason 2',
+      },
+    ];
+
+    (mapAssignments as jest.Mock).mockReturnValue(mockMappedAssignmentsMultiple);
+
+    render(<AssignmentTimeline incident={multipleAssignmentsIncident} />);
+
+    // Check if the vertical line is rendered between assignments
+    expect(screen.getAllByTestId('vertical-line')).toHaveLength(1);
+  });
+
+  it('handles empty or missing data', () => {
+    const emptyIncident: IncidentObject = {
+      assignments: [],
+      events: [],
     };
 
-    render(
-      <Context.Provider value={contextValueWithoutReason}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
+    (mapAssignments as jest.Mock).mockReturnValue([]);
 
-    expect(screen.queryByText("I see you need help with")).not.toBeInTheDocument();
-  });
+    render(<AssignmentTimeline incident={emptyIncident} />);
 
-  it("does not render event details if relevant event does not have DSAttributes", () => {
-    const incidentWithoutDSAttributes = { ...mockIncident, events: [] };
-    const contextValueWithoutDSAttributes = {
-      state: {
-        incidentGCState: {
-          incident: incidentWithoutDSAttributes,
-        },
-      },
-    };
-
-    render(
-      <Context.Provider value={contextValueWithoutDSAttributes}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
-
-    expect(screen.queryByText("Order:")).not.toBeInTheDocument();
-    expect(screen.queryByText("Trip:")).not.toBeInTheDocument();
-    expect(screen.queryByText("Date:")).not.toBeInTheDocument();
-  });
-
-  it("does not render IncidentAttachments if incident has no attachments", () => {
-    const incidentWithoutAttachments = { ...mockIncident, attachments: [] };
-    const contextValueWithoutAttachments = {
-      state: {
-        incidentGCState: {
-          incident: incidentWithoutAttachments,
-        },
-      },
-    };
-
-    render(
-      <Context.Provider value={contextValueWithoutAttachments}>
-        <ContactTimeline />
-      </Context.Provider>
-    );
-
-    expect(screen.queryByText("Mocked IncidentAttachments")).not.toBeInTheDocument();
+    // Check if no assignments are rendered
+    expect(screen.queryByTestId('accordion')).not.toBeInTheDocument();
   });
 });
