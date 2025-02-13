@@ -1,249 +1,153 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import AssignmentTimeline from './AssignmentTimeline';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import SdsContactSummary from 'components/contact-summary/contact-summary-templates/spark-driver/sds-contact-summary';
-import { mapAssignments } from 'utils/spark-driver/contact-timeline.utils';
-import { formatDateWithTimeZone } from 'utils/moment-time-utils';
-import { IncidentObject } from 'types/incident.types';
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { Context, GlobalContext } from "context";
+import IncentiveDetailsMissingTripsWidget from "./IncentiveDetailsMissingTripsWidget";
+import { SearchTrips } from "services/spark-driver/trip";
+import { formatDate } from "utils/moment-time-utils";
+import moment from "moment";
+import { TripResponse, TripIncentive, Trip } from "types/spark-driver/trip.types";
+import { Incentive } from "types/spark-driver/incentive.types";
 
-// Mock external components and utilities
-jest.mock('@mui/material/Accordion', () => ({
+// Mock the context
+const mockDispatch = jest.fn();
+const mockState = {
+  sparkDriver: {
+    selectedDriver: {
+      driverUserId: "123",
+    },
+  },
+};
+
+const mockContextValue = {
+  state: mockState,
+  dispatch: mockDispatch,
+};
+
+// Mock the services
+jest.mock("services/spark-driver/trip", () => ({
+  SearchTrips: jest.fn(),
+}));
+
+// Mock the utility functions
+jest.mock("utils/spark-driver/incentive-utils", () => ({
+  filteredTripsWithMatchIncentives: jest.fn(),
+}));
+
+jest.mock("utils/spark-driver/trip-utils", () => ({
+  sortTripsAndGroupTasks: jest.fn(),
+}));
+
+// Mock the child component
+jest.mock("components/incentive-accordion", () => ({
   __esModule: true,
-  default: jest.fn(({ children, onChange, defaultExpanded, id, className }) => (
-    <div data-testid="accordion" className={className} id={id} onClick={onChange}>
-      {children}
+  default: ({ trip, handleCheckboxChange, selectedMissingIncentives, onlyQualified }) => (
+    <div data-testid="incentive-accordion">
+      <input
+        type="checkbox"
+        data-testid={`checkbox-${trip.tripId}`}
+        onChange={() => handleCheckboxChange(trip)}
+        checked={selectedMissingIncentives.includes(trip)}
+      />
+      <span>{trip.tripId}</span>
     </div>
-  )),
+  ),
 }));
 
-jest.mock('@mui/material/AccordionDetails', () => ({
-  __esModule: true,
-  default: jest.fn(({ children }) => <div data-testid="accordion-details">{children}</div>),
-}));
+describe("IncentiveDetailsMissingTripsWidget", () => {
+  const mockIncentive: Incentive = {
+    incentiveEndDate: "2023-10-01",
+  } as Incentive;
 
-jest.mock('@mui/material/AccordionSummary', () => ({
-  __esModule: true,
-  default: jest.fn(({ children, expandIcon }) => (
-    <div data-testid="accordion-summary">
-      {children}
-      {expandIcon}
-    </div>
-  )),
-}));
+  const mockTrip: Trip = {
+    tripId: "trip-1",
+    isQualified: true,
+  } as Trip;
 
-jest.mock('components/contact-summary/contact-summary-templates/spark-driver/sds-contact-summary', () => ({
-  __esModule: true,
-  default: jest.fn(({ events }) => <div data-testid="sds-contact-summary">{events.length} events</div>),
-}));
+  const mockTripIncentive: TripIncentive = {
+    ...mockTrip,
+  } as TripIncentive;
 
-jest.mock('utils/spark-driver/contact-timeline.utils', () => ({
-  mapAssignments: jest.fn(),
-}));
-
-jest.mock('utils/moment-time-utils', () => ({
-  formatDateWithTimeZone: jest.fn(),
-}));
-
-describe('AssignmentTimeline', () => {
-  const mockIncident: IncidentObject = {
-    assignments: [
-      {
-        assignedDate: '2023-10-01T12:00:00Z',
-        agent: {
-          userName: 'johnDoe',
-        },
-      },
-    ],
-    events: [
-      {
-        eventDate: '2023-10-01T12:00:00Z',
-        eventType: 'CALL',
-      },
-    ],
+  const mockTripResponse: TripResponse = {
+    tripList: [mockTrip],
   };
 
-  const mockMappedAssignments = [
-    {
-      assignment: mockIncident.assignments[0],
-      events: mockIncident.events,
-      reason: 'Test Reason',
-    },
-  ];
-
   beforeEach(() => {
-    (mapAssignments as jest.Mock).mockReturnValue(mockMappedAssignments);
-    (formatDateWithTimeZone as jest.Mock).mockReturnValue('2023-10-01 12:00 PM');
+    jest.clearAllMocks();
+    (SearchTrips as jest.Mock).mockResolvedValue(mockTripResponse);
+    (filteredTripsWithMatchIncentives as jest.Mock).mockReturnValue([mockTripIncentive]);
+    (sortTripsAndGroupTasks as jest.Mock).mockReturnValue([mockTripIncentive]);
   });
 
-  it('renders the component with initial state', () => {
-    render(<AssignmentTimeline incident={mockIncident} />);
+  it("renders the component with the incentive end date", () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <IncentiveDetailsMissingTripsWidget
+          incentive={mockIncentive}
+          isQualifiedTrips={true}
+          setQualifiedTrips={jest.fn()}
+        />
+      </Context.Provider>
+    );
 
-    // Check if the Accordion is rendered
-    expect(screen.getByTestId('accordion')).toBeInTheDocument();
-
-    // Check if the AccordionSummary is rendered with the correct content
-    expect(screen.getByTestId('accordion-summary')).toBeInTheDocument();
-    expect(screen.getByText('Test Reason')).toBeInTheDocument();
-    expect(screen.getByText('johnDoe')).toBeInTheDocument();
-    expect(screen.getByText('2023-10-01 12:00 PM')).toBeInTheDocument();
-
-    // Check if the AccordionDetails is rendered with the correct content
-    expect(screen.getByTestId('accordion-details')).toBeInTheDocument();
-    expect(screen.getByTestId('sds-contact-summary')).toBeInTheDocument();
-    expect(screen.getByText('1 events')).toBeInTheDocument();
+    expect(screen.getByText(formatDate(mockIncentive.incentiveEndDate, "YYYY-MM-DD"))).toBeInTheDocument();
   });
 
-  it('handles accordion expansion and collapse', () => {
-    render(<AssignmentTimeline incident={mockIncident} />);
+  it("fetches trips and updates state on mount", async () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <IncentiveDetailsMissingTripsWidget
+          incentive={mockIncentive}
+          isQualifiedTrips={true}
+          setQualifiedTrips={jest.fn()}
+        />
+      </Context.Provider>
+    );
 
-    // Initially, the first accordion should be expanded
-    const accordion = screen.getByTestId('accordion');
-    expect(accordion).toHaveAttribute('aria-expanded', 'true');
-
-    // Simulate clicking on the accordion to collapse it
-    fireEvent.click(accordion);
-    expect(accordion).toHaveAttribute('aria-expanded', 'false');
-
-    // Simulate clicking on the accordion again to expand it
-    fireEvent.click(accordion);
-    expect(accordion).toHaveAttribute('aria-expanded', 'true');
+    await waitFor(() => {
+      expect(SearchTrips).toHaveBeenCalledWith({
+        fromDate: formatDate(moment(mockIncentive.incentiveEndDate).subtract(20, "days"), "YYYY-MM-DD"),
+        toDate: formatDate(moment(mockIncentive.incentiveEndDate).add(1, "day"), "YYYY-MM-DD"),
+        driverUserId: mockState.sparkDriver.selectedDriver.driverUserId,
+        criteria: "",
+      });
+      expect(screen.getByTestId("incentive-accordion")).toBeInTheDocument();
+    });
   });
 
-  it('renders multiple assignments correctly', () => {
-    const multipleAssignmentsIncident: IncidentObject = {
-      assignments: [
-        {
-          assignedDate: '2023-10-01T12:00:00Z',
-          agent: {
-            userName: 'johnDoe',
-          },
-        },
-        {
-          assignedDate: '2023-10-02T12:00:00Z',
-          agent: {
-            userName: 'janeDoe',
-          },
-        },
-      ],
-      events: [
-        {
-          eventDate: '2023-10-01T12:00:00Z',
-          eventType: 'CALL',
-        },
-        {
-          eventDate: '2023-10-02T12:00:00Z',
-          eventType: 'EMAIL',
-        },
-      ],
-    };
+  it("renders 'No Qualifying trips' message when no trips are available", async () => {
+    (filteredTripsWithMatchIncentives as jest.Mock).mockReturnValue([]);
+    (sortTripsAndGroupTasks as jest.Mock).mockReturnValue([]);
 
-    const mockMappedAssignmentsMultiple = [
-      {
-        assignment: multipleAssignmentsIncident.assignments[0],
-        events: multipleAssignmentsIncident.events,
-        reason: 'Test Reason 1',
-      },
-      {
-        assignment: multipleAssignmentsIncident.assignments[1],
-        events: multipleAssignmentsIncident.events,
-        reason: 'Test Reason 2',
-      },
-    ];
+    render(
+      <Context.Provider value={mockContextValue}>
+        <IncentiveDetailsMissingTripsWidget
+          incentive={mockIncentive}
+          isQualifiedTrips={true}
+          setQualifiedTrips={jest.fn()}
+        />
+      </Context.Provider>
+    );
 
-    (mapAssignments as jest.Mock).mockReturnValue(mockMappedAssignmentsMultiple);
-
-    render(<AssignmentTimeline incident={multipleAssignmentsIncident} />);
-
-    // Check if both assignments are rendered
-    expect(screen.getAllByTestId('accordion')).toHaveLength(2);
-    expect(screen.getByText('Test Reason 1')).toBeInTheDocument();
-    expect(screen.getByText('Test Reason 2')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("No Qualifying trips for the duration of the selected incentive")).toBeInTheDocument();
+    });
   });
 
-  it('renders the correct user initials', () => {
-    render(<AssignmentTimeline incident={mockIncident} />);
+  it("handles checkbox change and updates selectedMissingIncentiveList", async () => {
+    render(
+      <Context.Provider value={mockContextValue}>
+        <IncentiveDetailsMissingTripsWidget
+          incentive={mockIncentive}
+          isQualifiedTrips={true}
+          setQualifiedTrips={jest.fn()}
+        />
+      </Context.Provider>
+    );
 
-    // Check if the user initials are rendered correctly
-    expect(screen.getByText('JD')).toBeInTheDocument();
-  });
-
-  it('renders the correct date format', () => {
-    render(<AssignmentTimeline incident={mockIncident} />);
-
-    // Check if the date is formatted correctly
-    expect(screen.getByText('2023-10-01 12:00 PM')).toBeInTheDocument();
-  });
-
-  it('renders the correct number of events in the contact summary', () => {
-    render(<AssignmentTimeline incident={mockIncident} />);
-
-    // Check if the correct number of events is rendered in the contact summary
-    expect(screen.getByText('1 events')).toBeInTheDocument();
-  });
-
-  it('renders the vertical line between assignments', () => {
-    const multipleAssignmentsIncident: IncidentObject = {
-      assignments: [
-        {
-          assignedDate: '2023-10-01T12:00:00Z',
-          agent: {
-            userName: 'johnDoe',
-          },
-        },
-        {
-          assignedDate: '2023-10-02T12:00:00Z',
-          agent: {
-            userName: 'janeDoe',
-          },
-        },
-      ],
-      events: [
-        {
-          eventDate: '2023-10-01T12:00:00Z',
-          eventType: 'CALL',
-        },
-        {
-          eventDate: '2023-10-02T12:00:00Z',
-          eventType: 'EMAIL',
-        },
-      ],
-    };
-
-    const mockMappedAssignmentsMultiple = [
-      {
-        assignment: multipleAssignmentsIncident.assignments[0],
-        events: multipleAssignmentsIncident.events,
-        reason: 'Test Reason 1',
-      },
-      {
-        assignment: multipleAssignmentsIncident.assignments[1],
-        events: multipleAssignmentsIncident.events,
-        reason: 'Test Reason 2',
-      },
-    ];
-
-    (mapAssignments as jest.Mock).mockReturnValue(mockMappedAssignmentsMultiple);
-
-    render(<AssignmentTimeline incident={multipleAssignmentsIncident} />);
-
-    // Check if the vertical line is rendered between assignments
-    expect(screen.getAllByTestId('vertical-line')).toHaveLength(1);
-  });
-
-  it('handles empty or missing data', () => {
-    const emptyIncident: IncidentObject = {
-      assignments: [],
-      events: [],
-    };
-
-    (mapAssignments as jest.Mock).mockReturnValue([]);
-
-    render(<AssignmentTimeline incident={emptyIncident} />);
-
-    // Check if no assignments are rendered
-    expect(screen.queryByTestId('accordion')).not.toBeInTheDocument();
+    await waitFor(() => {
+      const checkbox = screen.getByTestId("checkbox-trip-1");
+      fireEvent.click(checkbox);
+      expect(mockDispatch).toHaveBeenCalledWith(setSelectedMissingIncentive([mockTripIncentive]));
+    });
   });
 });
