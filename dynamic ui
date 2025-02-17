@@ -1,153 +1,83 @@
-import moment from "moment";
-import {
-  filteredTripsWithMatchIncentives,
-  formatAccordionDate,
-  formatAccordionDescription,
-  htmlToPlainText,
-  convertToKeyValue,
-  parseDescription,
-} from "./path-to-your-file"; // Adjust the import path accordingly
+import { getAttachmentType, fetchAndDownloadFile } from './fileUtils';
+import { AttachmentType } from 'types/spark-driver/incident-attachments.types';
 
-describe("filteredTripsWithMatchIncentives", () => {
-  it("should return trips with matched incentives", () => {
-    const trips = [
-      { tripId: "1", tripName: "Trip 1" },
-      { tripId: "2", tripName: "Trip 2" },
-    ];
-    const incentive = {
-      eventProgress: [
-        {
-          eventDetails: [
-            { tripId: "1", zone: "Zone A" },
-            { tripId: "3", zone: "Zone B" },
-          ],
-        },
-      ],
-    };
+// Mock for fetch and URL.createObjectURL
+global.fetch = jest.fn();
+global.URL.createObjectURL = jest.fn();
+global.document.createElement = jest.fn().mockReturnValue({ click: jest.fn() });
 
-    const result = filteredTripsWithMatchIncentives(trips, incentive);
-
-    expect(result).toEqual([
-      { tripId: "1", tripName: "Trip 1", zone: "Zone A", isQualified: true },
-      { tripId: "2", tripName: "Trip 2", zone: null, isQualified: false },
-    ]);
+describe('getAttachmentType', () => {
+  it('should return PDF for .pdf extension', () => {
+    const result = getAttachmentType('file.pdf');
+    expect(result).toBe(AttachmentType.PDF);
   });
 
-  it("should handle empty trips array", () => {
-    const trips = [];
-    const incentive = {
-      eventProgress: [
-        {
-          eventDetails: [
-            { tripId: "1", zone: "Zone A" },
-          ],
-        },
-      ],
-    };
-
-    const result = filteredTripsWithMatchIncentives(trips, incentive);
-
-    expect(result).toEqual([]);
+  it('should return IMAGE for .png extension', () => {
+    const result = getAttachmentType('file.png');
+    expect(result).toBe(AttachmentType.IMAGE);
   });
 
-  it("should handle empty eventProgress array", () => {
-    const trips = [
-      { tripId: "1", tripName: "Trip 1" },
-    ];
-    const incentive = {
-      eventProgress: [],
-    };
+  it('should return IMAGE for .jpeg extension', () => {
+    const result = getAttachmentType('file.jpeg');
+    expect(result).toBe(AttachmentType.IMAGE);
+  });
 
-    const result = filteredTripsWithMatchIncentives(trips, incentive);
+  it('should return IMAGE for .jpg extension', () => {
+    const result = getAttachmentType('file.jpg');
+    expect(result).toBe(AttachmentType.IMAGE);
+  });
 
-    expect(result).toEqual([
-      { tripId: "1", tripName: "Trip 1", zone: null, isQualified: false },
-    ]);
+  it('should return IMAGE for .tif extension', () => {
+    const result = getAttachmentType('file.tif');
+    expect(result).toBe(AttachmentType.IMAGE);
+  });
+
+  it('should return OTHER for unknown extension', () => {
+    const result = getAttachmentType('file.xyz');
+    expect(result).toBe(AttachmentType.OTHER);
+  });
+
+  it('should return OTHER for no extension', () => {
+    const result = getAttachmentType('file');
+    expect(result).toBe(AttachmentType.OTHER);
   });
 });
 
-describe("formatAccordionDate", () => {
-  it("should format date string correctly", () => {
-    const dateString = "2023-10-05";
-    const result = formatAccordionDate(dateString);
-    expect(result).toBe("10/05/2023");
+describe('fetchAndDownloadFile', () => {
+  it('should handle successful fetch and download', async () => {
+    const mockBlob = new Blob();
+    const mockResponse = { ok: true, blob: jest.fn().mockResolvedValue(mockBlob) };
+    global.fetch.mockResolvedValue(mockResponse);
+
+    await fetchAndDownloadFile('http://example.com/file', 'file.pdf');
+
+    expect(fetch).toHaveBeenCalledWith('http://example.com/file');
+    expect(mockResponse.blob).toHaveBeenCalled();
+    expect(document.createElement).toHaveBeenCalledWith('a');
+    expect(document.body.appendChild).toHaveBeenCalled();
+    expect(document.body.removeChild).toHaveBeenCalled();
+    expect(URL.revokeObjectURL).toHaveBeenCalled();
   });
 
-  it("should handle invalid date string", () => {
-    const dateString = "invalid-date";
-    const result = formatAccordionDate(dateString);
-    expect(result).toBe("Invalid date");
-  });
-});
+  it('should handle fetch error', async () => {
+    const mockError = new Error('Network Error');
+    global.fetch.mockRejectedValue(mockError);
 
-describe("formatAccordionDescription", () => {
-  it("should replace newlines with spaces", () => {
-    const description = "Line 1\nLine 2\nLine 3";
-    const result = formatAccordionDescription(description);
-    expect(result).toBe("Line 1 Line 2 Line 3");
+    await fetchAndDownloadFile('http://example.com/file', 'file.pdf');
+
+    expect(fetch).toHaveBeenCalledWith('http://example.com/file');
+    expect(console.error).toHaveBeenCalledWith(mockError);
   });
 
-  it("should handle undefined description", () => {
-    const description = undefined;
-    const result = formatAccordionDescription(description);
-    expect(result).toBe("");
-  });
-});
+  it('should handle response not OK', async () => {
+    const mockResponse = { ok: false, statusText: 'Not Found' };
+    global.fetch.mockResolvedValue(mockResponse);
 
-describe("htmlToPlainText", () => {
-  it("should remove HTML tags from the input string", () => {
-    const input = "<p>Hello <b>World</b></p>";
-    const result = htmlToPlainText(input);
-    expect(result).toBe("Hello World");
-  });
+    await fetchAndDownloadFile('http://example.com/file', 'file.pdf');
 
-  it("should handle empty input", () => {
-    const input = "";
-    const result = htmlToPlainText(input);
-    expect(result).toBe("");
-  });
-});
-
-describe("convertToKeyValue", () => {
-  it("should convert lines to key-value pairs", () => {
-    const lines = ["key1: value1", "key2: value2", "justValue"];
-    const result = convertToKeyValue(lines);
-    expect(result).toEqual([
-      { key: "key1", value: "value1" },
-      { key: "key2", value: "value2" },
-      { key: "", value: "justValue" },
-    ]);
-  });
-
-  it("should handle empty lines array", () => {
-    const lines = [];
-    const result = convertToKeyValue(lines);
-    expect(result).toEqual([]);
-  });
-});
-
-describe("parseDescription", () => {
-  it("should parse description correctly", () => {
-    const summary = "<p>Summary</p>";
-    const description = "Line 1\nkey1: value1\nkey2: value2\nFooter";
-    const result = parseDescription(summary, description);
-    expect(result).toEqual({
-      header: {
-        summary: "Summary",
-        line: "Line 1",
-      },
-      body: [
-        { key: "key1", value: "value1" },
-        { key: "key2", value: "value2" },
-      ],
-      footer: "Footer",
-    });
-  });
-
-  it("should handle empty description", () => {
-    const summary = "<p>Summary</p>";
-    const description = "";
-    const result = parseDescription(summary, description);
-    expect(result).toBeUndefined();
+    expect(fetch).toHaveBeenCalledWith('http://example.com/file');
+    expect(console.error).toHaveBeenCalledWith(
+      new Error('Failed to fetch file.pdf: Not Found')
+    );
   });
 });
