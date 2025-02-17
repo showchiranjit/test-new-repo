@@ -1,72 +1,198 @@
-import { validateSafetyIssue } from "./path-to-your-code";
-import { SafetyIssue } from "types/spark-driver/safety-issue.types";
+import { getIssueOptions } from './path-to-your-file';
+import { IssueOption } from '../../types/spark-driver/select-delivery-issue.types';
 
-describe("validateSafetyIssue", () => {
-  it("should return invalid selection and valid comments when selection is null", () => {
-    const issue: SafetyIssue = {
-      selection: null,
-      comments: "Some comments",
+describe('getIssueOptions', () => {
+  it('should return combined critical and non-critical issue options', () => {
+    const attributes = {
+      critical: [{ issueType: 'Critical1' }, { issueType: 'Critical2' }],
+      nonCritical: [{ issueType: 'NonCritical1' }, { issueType: 'NonCritical2' }],
     };
 
-    const result = validateSafetyIssue(issue);
+    const result = getIssueOptions(attributes);
 
-    expect(result.selection.valid).toBe(false);
+    expect(result).toEqual([
+      { id: 'Critical1', value: 'Critical1', issueCriticality: 'critical' },
+      { id: 'Critical2', value: 'Critical2', issueCriticality: 'critical' },
+      { id: 'NonCritical1', value: 'NonCritical1', issueCriticality: 'nonCritical' },
+      { id: 'NonCritical2', value: 'NonCritical2', issueCriticality: 'nonCritical' },
+    ]);
+  });
+
+  it('should return an empty array if no critical or non-critical issues are provided', () => {
+    const attributes = {
+      critical: [],
+      nonCritical: [],
+    };
+
+    const result = getIssueOptions(attributes);
+
+    expect(result).toEqual([]);
+  });
+});
+
+import { validateSelectedDeliveryIssue } from './path-to-your-file';
+import { DeliveryIssue } from '../../types/spark-driver/select-delivery-issue.types';
+
+describe('validateSelectedDeliveryIssue', () => {
+  it('should validate delivery issue with all required fields', () => {
+    const deliveryIssue = {
+      issueTypeOption: { issueType: 'Critical1' },
+      issueSubType: 'SubType1',
+      comments: 'Some comments',
+    };
+
+    const result = validateSelectedDeliveryIssue(deliveryIssue, true);
+
+    expect(result).toEqual({
+      issueTypeOption: { valid: true, feedback: 'This field is required' },
+      issueSubType: { valid: true, feedback: 'This field is required' },
+      comments: { valid: true, feedback: '' },
+      issueCriticality: { valid: true },
+    });
+  });
+
+  it('should validate delivery issue with missing required fields', () => {
+    const deliveryIssue = {
+      issueTypeOption: null,
+      issueSubType: null,
+      comments: '',
+    };
+
+    const result = validateSelectedDeliveryIssue(deliveryIssue, true);
+
+    expect(result).toEqual({
+      issueTypeOption: { valid: false, feedback: 'This field is required' },
+      issueSubType: { valid: true, feedback: 'This field is required' },
+      comments: { valid: false, feedback: 'This field is required' },
+      issueCriticality: { valid: true },
+    });
+  });
+
+  it('should not validate comments if showComments is false', () => {
+    const deliveryIssue = {
+      issueTypeOption: { issueType: 'Critical1' },
+      issueSubType: 'SubType1',
+      comments: '',
+    };
+
+    const result = validateSelectedDeliveryIssue(deliveryIssue, false);
+
     expect(result.comments.valid).toBe(true);
   });
+});
 
-  it("should return valid selection and valid comments when selection is present and criticality is not nonCritical", () => {
-    const issue: SafetyIssue = {
-      selection: {
-        criticality: "critical",
-      },
-      comments: "",
+
+import { preparePayloadForReportDeliveryIssue } from './path-to-your-file';
+import { ReportDeliveryIssue, sparkDriverContext } from '../../types/spark-driver/trip.types';
+
+describe('preparePayloadForReportDeliveryIssue', () => {
+  it('should prepare payload for reporting delivery issue', () => {
+    const deliveryIssue = {
+      issueTypeOption: { issueType: 'Critical1', issueCriticality: 'critical' },
+      issueSubType: 'SubType1',
+      comments: 'Some comments',
     };
 
-    const result = validateSafetyIssue(issue);
+    const context = {
+      selectedDriver: { driverUserId: '123', firstName: 'John', lastName: 'Doe' },
+      selectedTask: { id: 'task1', orderId: 'order1', storeId: 'store1' },
+      selectedTrip: { tripId: 'trip1' },
+    };
 
-    expect(result.selection.valid).toBe(true);
-    expect(result.comments.valid).toBe(true);
+    const result = preparePayloadForReportDeliveryIssue(deliveryIssue, context);
+
+    expect(result).toEqual({
+      driverId: '123',
+      driverName: 'John Doe',
+      serviceProvider: 'Spark',
+      issueCriticality: 'critical',
+      issueType: 'Critical1',
+      issueSubType: 'SubType1',
+      deliveryTaskId: 'task1',
+      comments: 'Some comments',
+      orders: ['order1'],
+      storeId: Number('store1'),
+      tripId: 'trip1',
+    });
   });
 
-  it("should return valid selection and invalid comments when selection is present, criticality is nonCritical, and comments are empty", () => {
-    const issue: SafetyIssue = {
-      selection: {
-        criticality: "nonCritical",
-      },
-      comments: "",
+  it('should handle missing selectedTask and selectedTrip', () => {
+    const deliveryIssue = {
+      issueTypeOption: { issueType: 'Critical1', issueCriticality: 'critical' },
+      issueSubType: 'SubType1',
+      comments: 'Some comments',
     };
 
-    const result = validateSafetyIssue(issue);
+    const context = {
+      selectedDriver: { driverUserId: '123', firstName: 'John', lastName: 'Doe' },
+      selectedTask: null,
+      selectedTrip: null,
+    };
 
-    expect(result.selection.valid).toBe(true);
-    expect(result.comments.valid).toBe(false);
+    const result = preparePayloadForReportDeliveryIssue(deliveryIssue, context);
+
+    expect(result).toEqual({
+      driverId: '123',
+      driverName: 'John Doe',
+      serviceProvider: 'Spark',
+      issueCriticality: 'critical',
+      issueType: 'Critical1',
+      issueSubType: 'SubType1',
+      deliveryTaskId: undefined,
+      comments: 'Some comments',
+      orders: [undefined],
+      storeId: NaN,
+      tripId: undefined,
+    });
+  });
+});
+
+
+import { shouldShowComments } from './path-to-your-file';
+import { IssueOption } from '../../types/spark-driver/select-delivery-issue.types';
+
+describe('shouldShowComments', () => {
+  it('should return true if issueDescRequired includes issueSubType', () => {
+    const issueTypeOption = {
+      issueCriticality: 'nonCritical',
+      issueDescRequired: ['SubType1'],
+    };
+
+    const result = shouldShowComments(issueTypeOption, 'SubType1');
+
+    expect(result).toBe(true);
   });
 
-  it("should return valid selection and valid comments when selection is present, criticality is nonCritical, and comments are non-empty", () => {
-    const issue: SafetyIssue = {
-      selection: {
-        criticality: "nonCritical",
-      },
-      comments: "Some comments",
+  it('should return true if issueCriticality is critical', () => {
+    const issueTypeOption = {
+      issueCriticality: 'critical',
+      issueDescRequired: [],
     };
 
-    const result = validateSafetyIssue(issue);
+    const result = shouldShowComments(issueTypeOption, 'SubType1');
 
-    expect(result.selection.valid).toBe(true);
-    expect(result.comments.valid).toBe(true);
+    expect(result).toBe(true);
   });
 
-  it("should return valid selection and invalid comments when selection is present, criticality is nonCritical, and comments are only whitespace", () => {
-    const issue: SafetyIssue = {
-      selection: {
-        criticality: "nonCritical",
-      },
-      comments: "   ",
+  it('should return true if issueSubType is "Other"', () => {
+    const issueTypeOption = {
+      issueCriticality: 'nonCritical',
+      issueDescRequired: [],
     };
 
-    const result = validateSafetyIssue(issue);
+    const result = shouldShowComments(issueTypeOption, 'Other');
 
-    expect(result.selection.valid).toBe(true);
-    expect(result.comments.valid).toBe(false);
+    expect(result).toBe(true);
+  });
+
+  it('should return false if none of the conditions are met', () => {
+    const issueTypeOption = {
+      issueCriticality: 'nonCritical',
+      issueDescRequired: [],
+    };
+
+    const result = shouldShowComments(issueTypeOption, 'SubType2');
+
+    expect(result).toBe(false);
   });
 });
