@@ -1,106 +1,179 @@
-import { extractMetadataForSDS } from './yourFile'; // replace with correct path
-import { ContextData } from 'context/state-types';
-import { ObjectRecord } from 'types/app.types';
+import { formatSelectedDriver } from './path-to-your-file';
 
-describe('extractMetadataForSDS', () => {
-  it('should return correct metadata when state is fully populated', () => {
-    const state: ContextData = {
-      sparkDriver: {
-        selectedDriver: { email: 'driver@example.com' },
-        selectedTrip: { tripId: '12345', displayTripId: 'Trip-12345' },
-        selectedTask: { orderId: 'order123', id: 'task123' },
-      },
+describe('formatSelectedDriver', () => {
+  it('should format a driver object with all fields', () => {
+    const driver = {
+      driverUUID: '123',
+      firstName: 'John',
+      lastName: 'Doe',
+      mobile: '1234567890',
+      email: 'john.doe@example.com',
     };
 
-    const result: ObjectRecord = extractMetadataForSDS(state);
+    const result = formatSelectedDriver(driver);
 
     expect(result).toEqual({
-      driverId: 'driver@example.com',
-      trip: '12345',
-      displayTripId: 'Trip-12345',
-      order: 'order123',
-      task: 'task123',
+      driverUUID: '123',
+      firstName: 'John',
+      lastName: 'Doe',
+      mobile: '1234567890',
+      email: 'john.doe@example.com',
     });
   });
 
-  it('should return null for missing selectedDriver', () => {
-    const state: ContextData = {
-      sparkDriver: {
-        selectedDriver: null,
-        selectedTrip: { tripId: '12345', displayTripId: 'Trip-12345' },
-        selectedTask: { orderId: 'order123', id: 'task123' },
-      },
+  it('should format a driver object with missing fields', () => {
+    const driver = {
+      driverUUID: '123',
+      firstName: 'John',
     };
 
-    const result: ObjectRecord = extractMetadataForSDS(state);
+    const result = formatSelectedDriver(driver);
 
     expect(result).toEqual({
-      driverId: null,
-      trip: '12345',
-      displayTripId: 'Trip-12345',
-      order: 'order123',
-      task: 'task123',
+      driverUUID: '123',
+      firstName: 'John',
+      lastName: '',
+      mobile: undefined,
+      email: undefined,
     });
   });
 
-  it('should return null for missing selectedTrip', () => {
-    const state: ContextData = {
-      sparkDriver: {
-        selectedDriver: { email: 'driver@example.com' },
-        selectedTrip: null,
-        selectedTask: { orderId: 'order123', id: 'task123' },
-      },
-    };
-
-    const result: ObjectRecord = extractMetadataForSDS(state);
+  it('should handle undefined driver', () => {
+    const result = formatSelectedDriver(undefined);
 
     expect(result).toEqual({
-      driverId: 'driver@example.com',
-      trip: null,
-      displayTripId: null,
-      order: 'order123',
-      task: 'task123',
+      driverUUID: '',
+      firstName: '',
+      lastName: '',
+      mobile: undefined,
+      email: undefined,
     });
   });
 
-  it('should return null for missing selectedTask', () => {
-    const state: ContextData = {
-      sparkDriver: {
-        selectedDriver: { email: 'driver@example.com' },
-        selectedTrip: { tripId: '12345', displayTripId: 'Trip-12345' },
-        selectedTask: null,
-      },
-    };
-
-    const result: ObjectRecord = extractMetadataForSDS(state);
+  it('should handle null driver', () => {
+    const result = formatSelectedDriver(null);
 
     expect(result).toEqual({
-      driverId: 'driver@example.com',
-      trip: '12345',
-      displayTripId: 'Trip-12345',
-      order: null,
-      task: null,
-    });
-  });
-
-  it('should return null for all fields when state is missing all properties', () => {
-    const state: ContextData = {
-      sparkDriver: {
-        selectedDriver: null,
-        selectedTrip: null,
-        selectedTask: null,
-      },
-    };
-
-    const result: ObjectRecord = extractMetadataForSDS(state);
-
-    expect(result).toEqual({
-      driverId: null,
-      trip: null,
-      displayTripId: null,
-      order: null,
-      task: null,
+      driverUUID: '',
+      firstName: '',
+      lastName: '',
+      mobile: undefined,
+      email: undefined,
     });
   });
 });
 
+
+
+
+import { formatDriverDataToCustomer } from './path-to-your-file';
+import { CustomerContext } from 'types/customer.types';
+
+describe('formatDriverDataToCustomer', () => {
+  it('should format a driver object to customer context with all fields', () => {
+    const driver = {
+      driverUUID: '123',
+      firstName: 'John',
+      lastName: 'Doe',
+      mobile: '1234567890',
+      email: 'john.doe@example.com',
+      searchInput: 'John Doe',
+      isVerified: true,
+    };
+
+    const result = formatDriverDataToCustomer(driver);
+
+    expect(result).toEqual({
+      id: '123',
+      firstName: 'John',
+      lastName: 'Doe',
+      phone: '1234567890',
+      phonePrefix: '',
+      email: 'john.doe@example.com',
+      searchInput: 'John Doe',
+      postalCode: '',
+      member: false,
+      memberSince: 0,
+      customerSince: 0,
+      isVerified: true,
+      customerType: '',
+      accountType: '',
+      updateState: false,
+      accountReason: '',
+    });
+  });
+
+  it('should format a driver object to customer context with missing fields', () => {
+    const driver = {
+      driverUUID: '123',
+      firstName: 'John',
+    };
+
+    const result = formatDriverDataToCustomer(driver);
+
+    expect(result).toEqual({
+      id: '123',
+      firstName: 'John',
+      lastName: '',
+      phone: undefined,
+      phonePrefix: '',
+      email: undefined,
+      searchInput: undefined,
+      postalCode: '',
+      member: false,
+      memberSince: 0,
+      customerSince: 0,
+      isVerified: undefined,
+      customerType: '',
+      accountType: '',
+      updateState: false,
+      accountReason: '',
+    });
+  });
+
+  it('should handle undefined driver', () => {
+    const result = formatDriverDataToCustomer(undefined);
+
+    expect(result).toEqual({
+      id: '',
+      firstName: '',
+      lastName: '',
+      phone: undefined,
+      phonePrefix: '',
+      email: undefined,
+      searchInput: undefined,
+      postalCode: '',
+      member: false,
+      memberSince: 0,
+      customerSince: 0,
+      isVerified: undefined,
+      customerType: '',
+      accountType: '',
+      updateState: false,
+      accountReason: '',
+    });
+  });
+
+  it('should handle null driver', () => {
+    const result = formatDriverDataToCustomer(null);
+
+    expect(result).toEqual({
+      id: '',
+      firstName: '',
+      lastName: '',
+      phone: undefined,
+      phonePrefix: '',
+      email: undefined,
+      searchInput: undefined,
+      postalCode: '',
+      member: false,
+      memberSince: 0,
+      customerSince: 0,
+      isVerified: undefined,
+      customerType: '',
+      accountType: '',
+      updateState: false,
+      accountReason: '',
+    });
+  });
+});
