@@ -1,162 +1,98 @@
-import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import "@testing-library/jest-dom/extend-expect";
-import IncentiveAccordion from "./IncentiveAccordion";
-import Accordion from "@mui/material/Accordion";
-import AccordionSummary from "@mui/material/AccordionSummary";
-import AccordionDetails from "@mui/material/AccordionDetails";
-import { Trip, TripIncentive } from "types/spark-driver/trip.types";
-import { formatDeliveryTimeRange, getTripTitleDate } from "utils/spark-driver/trip-utils";
-import { DATE_FORMAT_V1 } from "utils/moment-time-utils";
-import TaskList from "../trip-list-widget/task-list";
+import { render, screen } from '@testing-library/react';
+import { getRelevantEvent, hasSDSAttributes, mapAssignments } from './path-to-your-file';
+import { Assignment, CaseEvent } from 'types/incident.types';
+import moment from 'moment';
 
-// Mock the necessary components and utilities
-jest.mock("@mui/material/Accordion", () => ({
-  __esModule: true,
-  default: ({ children, defaultExpanded, className }) => (
-    <div data-testid="accordion" className={className}>
-      {children}
-    </div>
-  ),
-}));
+describe('getRelevantEvent', () => {
+  it('should return the first event with a reason or SDS attributes', () => {
+    const events: CaseEvent[] = [
+      { createdDate: '2023-10-01', reason: 'Reason 1', eventAttributes: {} },
+      { createdDate: '2023-10-02', reason: '', eventAttributes: { orderId: '123' } },
+      { createdDate: '2023-10-03', reason: 'Reason 2', eventAttributes: {} },
+    ];
 
-jest.mock("@mui/material/AccordionSummary", () => ({
-  __esModule: true,
-  default: ({ children, expandIcon, className }) => (
-    <div data-testid="accordion-summary" className={className}>
-      {children}
-      {expandIcon}
-    </div>
-  ),
-}));
-
-jest.mock("@mui/material/AccordionDetails", () => ({
-  __esModule: true,
-  default: ({ children, className }) => (
-    <div data-testid="accordion-details" className={className}>
-      {children}
-    </div>
-  ),
-}));
-
-jest.mock("../trip-list-widget/task-list", () => ({
-  __esModule: true,
-  default: ({ trip, tasks }) => (
-    <div data-testid="task-list">
-      {trip.displayTripId} - {tasks.length} tasks
-    </div>
-  ),
-}));
-
-jest.mock("utils/spark-driver/trip-utils", () => ({
-  formatDeliveryTimeRange: jest.fn(() => "10:00 AM - 12:00 PM"),
-  getTripTitleDate: jest.fn(() => "2023-10-01"),
-}));
-
-describe("IncentiveAccordion", () => {
-  const trip: TripIncentive = {
-    tripId: "1",
-    displayTripId: "123",
-    tripStartDateTime: "2023-10-01T10:00:00",
-    tripEndDateTime: "2023-10-01T12:00:00",
-    totalDeliveryTasks: 3,
-    sortedGroupOrder: ["store1", "store2"],
-    tasksGroupByStoreId: {
-      store1: [{ taskId: "task1" }],
-      store2: [{ taskId: "task2" }, { taskId: "task3" }],
-    },
-    isQualified: false,
-    Zone: "Zone A",
-  };
-
-  const selectedMissingIncentives: Trip[] = [];
-  const handleCheckboxChange = jest.fn();
-
-  const renderComponent = (props = {}) => {
-    return render(
-      <IncentiveAccordion
-        trip={trip}
-        selectedMissingIncentives={selectedMissingIncentives}
-        handleCheckboxChange={handleCheckboxChange}
-        onlyQualified={false}
-        {...props}
-      />
-    );
-  };
-
-  it("renders the component correctly", () => {
-    renderComponent();
-
-    expect(screen.getByText("Trip 123")).toBeInTheDocument();
-    expect(screen.getByText("3 orders")).toBeInTheDocument();
-    expect(screen.getByText("Zone A")).toBeInTheDocument();
-    expect(screen.getByText("2023-10-01")).toBeInTheDocument();
-    expect(screen.getByText("10:00 AM - 12:00 PM")).toBeInTheDocument();
-    expect(screen.getByTestId("accordion")).toBeInTheDocument();
-    expect(screen.getByTestId("accordion-summary")).toBeInTheDocument();
-    expect(screen.getByTestId("accordion-details")).toBeInTheDocument();
-    expect(screen.getAllByTestId("task-list")).toHaveLength(2);
+    const result = getRelevantEvent(events);
+    expect(result).toEqual(events[0]);
   });
 
-  it("renders the checkbox when onlyQualified is false", () => {
-    renderComponent();
+  it('should return undefined if no events have a reason or SDS attributes', () => {
+    const events: CaseEvent[] = [
+      { createdDate: '2023-10-01', reason: '', eventAttributes: {} },
+      { createdDate: '2023-10-02', reason: '', eventAttributes: {} },
+    ];
 
-    const checkbox = screen.getByRole("checkbox");
-    expect(checkbox).toBeInTheDocument();
-    expect(checkbox).not.toBeChecked();
+    const result = getRelevantEvent(events);
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('hasSDSAttributes', () => {
+  it('should return true if event has orderId or trioId', () => {
+    const event: CaseEvent = { createdDate: '2023-10-01', reason: '', eventAttributes: { orderId: '123' } };
+    expect(hasSDSAttributes(event)).toBe(true);
   });
 
-  it("does not render the checkbox when onlyQualified is true", () => {
-    renderComponent({ onlyQualified: true });
-
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  it('should return false if event has no orderId or trioId', () => {
+    const event: CaseEvent = { createdDate: '2023-10-01', reason: '', eventAttributes: {} };
+    expect(hasSDSAttributes(event)).toBe(false);
   });
 
-  it("calls handleCheckboxChange when checkbox is clicked", () => {
-    renderComponent();
+  it('should return false if event is undefined', () => {
+    expect(hasSDSAttributes(undefined)).toBe(false);
+  });
+});
 
-    const checkbox = screen.getByRole("checkbox");
-    fireEvent.click(checkbox);
+describe('mapAssignments', () => {
+  it('should map assignments with relevant events and reason', () => {
+    const assignments: Assignment[] = [
+      { assignedDate: '2023-10-01', agent: { userName: 'user1' } },
+      { assignedDate: '2023-10-03', agent: { userName: 'user2' } },
+    ];
 
-    expect(handleCheckboxChange).toHaveBeenCalledWith(trip);
+    const events: CaseEvent[] = [
+      { createdDate: '2023-10-02', reason: 'Reason 1', agent: { userName: 'user1' }, eventAttributes: {} },
+      { createdDate: '2023-10-04', reason: 'Reason 2', agent: { userName: 'user2' }, eventAttributes: {} },
+    ];
+
+    const result = mapAssignments(assignments, events);
+    expect(result).toEqual([
+      {
+        assignment: assignments[0],
+        events: [events[0]],
+        reason: 'Reason 1',
+      },
+      {
+        assignment: assignments[1],
+        events: [events[1]],
+        reason: 'Reason 2',
+      },
+    ]);
   });
 
-  it("disables the checkbox when trip is qualified", () => {
-    renderComponent({ trip: { ...trip, isQualified: true } });
+  it('should handle empty events array', () => {
+    const assignments: Assignment[] = [
+      { assignedDate: '2023-10-01', agent: { userName: 'user1' } },
+    ];
 
-    const checkbox = screen.getByRole("checkbox");
-    expect(checkbox).toBeDisabled();
+    const events: CaseEvent[] = [];
+
+    const result = mapAssignments(assignments, events);
+    expect(result).toEqual([
+      {
+        assignment: assignments[0],
+        events: [],
+        reason: '',
+      },
+    ]);
   });
 
-  it("applies the correct background color based on qualification status", () => {
-    const { rerender } = renderComponent();
+  it('should handle empty assignments array', () => {
+    const assignments: Assignment[] = [];
+    const events: CaseEvent[] = [
+      { createdDate: '2023-10-02', reason: 'Reason 1', agent: { userName: 'user1' }, eventAttributes: {} },
+    ];
 
-    const accordionSummary = screen.getByTestId("accordion-summary");
-    expect(accordionSummary).toHaveClass("tw-bg-blue-10");
-
-    rerender(
-      <IncentiveAccordion
-        trip={{ ...trip, isQualified: true }}
-        selectedMissingIncentives={selectedMissingIncentives}
-        handleCheckboxChange={handleCheckboxChange}
-        onlyQualified={false}
-      />
-    );
-
-    expect(accordionSummary).toHaveClass("tw-bg-[#EAF3E6]");
-  });
-
-  it("renders the correct number of TaskList components", () => {
-    renderComponent();
-
-    expect(screen.getAllByTestId("task-list")).toHaveLength(2);
-  });
-
-  it("renders the correct task count in TaskList components", () => {
-    renderComponent();
-
-    const taskLists = screen.getAllByTestId("task-list");
-    expect(taskLists[0]).toHaveTextContent("123 - 1 tasks");
-    expect(taskLists[1]).toHaveTextContent("123 - 2 tasks");
+    const result = mapAssignments(assignments, events);
+    expect(result).toEqual([]);
   });
 });
