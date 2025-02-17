@@ -1,198 +1,124 @@
-import { getIssueOptions } from './path-to-your-file';
-import { IssueOption } from '../../types/spark-driver/select-delivery-issue.types';
+import { 
+  formatDateWithTimeZoneV3, 
+  formatTaskEvents, 
+  transformAddress, 
+  transformInfo, 
+  formatAndSetData, 
+  selectedOptions, 
+  transformOptions 
+} from './yourModule';
+import moment from 'moment';
 
-describe('getIssueOptions', () => {
-  it('should return combined critical and non-critical issue options', () => {
-    const attributes = {
-      critical: [{ issueType: 'Critical1' }, { issueType: 'Critical2' }],
-      nonCritical: [{ issueType: 'NonCritical1' }, { issueType: 'NonCritical2' }],
-    };
+// Mock data
+const mockTaskEvent = { eventId: 1, eventType: 'delivery', timestamp: 1632499200000 };
+const mockDeliveryTask = {
+  serviceType: 'DELIVERY',
+  storeInfo: { addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US' },
+  taskEvents: [mockTaskEvent],
+  customerInfo: { addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US' },
+};
+const mockTaskList = [mockDeliveryTask];
 
-    const result = getIssueOptions(attributes);
-
-    expect(result).toEqual([
-      { id: 'Critical1', value: 'Critical1', issueCriticality: 'critical' },
-      { id: 'Critical2', value: 'Critical2', issueCriticality: 'critical' },
-      { id: 'NonCritical1', value: 'NonCritical1', issueCriticality: 'nonCritical' },
-      { id: 'NonCritical2', value: 'NonCritical2', issueCriticality: 'nonCritical' },
-    ]);
+// Test formatDateWithTimeZoneV3
+describe('formatDateWithTimeZoneV3', () => {
+  it('should format the date with the correct timezone and time slot', () => {
+    const startTime = 1632499200000;
+    const endTime = 1632502800000;
+    const timezone = 'America/Chicago';
+    const formattedDate = formatDateWithTimeZoneV3(startTime, endTime, timezone);
+    expect(formattedDate).toBe('12:00 AM - 01:00 AM CDT 2021-09-24');
   });
 
-  it('should return an empty array if no critical or non-critical issues are provided', () => {
-    const attributes = {
-      critical: [],
-      nonCritical: [],
-    };
-
-    const result = getIssueOptions(attributes);
-
-    expect(result).toEqual([]);
-  });
-});
-
-import { validateSelectedDeliveryIssue } from './path-to-your-file';
-import { DeliveryIssue } from '../../types/spark-driver/select-delivery-issue.types';
-
-describe('validateSelectedDeliveryIssue', () => {
-  it('should validate delivery issue with all required fields', () => {
-    const deliveryIssue = {
-      issueTypeOption: { issueType: 'Critical1' },
-      issueSubType: 'SubType1',
-      comments: 'Some comments',
-    };
-
-    const result = validateSelectedDeliveryIssue(deliveryIssue, true);
-
-    expect(result).toEqual({
-      issueTypeOption: { valid: true, feedback: 'This field is required' },
-      issueSubType: { valid: true, feedback: 'This field is required' },
-      comments: { valid: true, feedback: '' },
-      issueCriticality: { valid: true },
-    });
-  });
-
-  it('should validate delivery issue with missing required fields', () => {
-    const deliveryIssue = {
-      issueTypeOption: null,
-      issueSubType: null,
-      comments: '',
-    };
-
-    const result = validateSelectedDeliveryIssue(deliveryIssue, true);
-
-    expect(result).toEqual({
-      issueTypeOption: { valid: false, feedback: 'This field is required' },
-      issueSubType: { valid: true, feedback: 'This field is required' },
-      comments: { valid: false, feedback: 'This field is required' },
-      issueCriticality: { valid: true },
-    });
-  });
-
-  it('should not validate comments if showComments is false', () => {
-    const deliveryIssue = {
-      issueTypeOption: { issueType: 'Critical1' },
-      issueSubType: 'SubType1',
-      comments: '',
-    };
-
-    const result = validateSelectedDeliveryIssue(deliveryIssue, false);
-
-    expect(result.comments.valid).toBe(true);
+  it('should use default values when no timezone or format is provided', () => {
+    const startTime = 1632499200000;
+    const endTime = 1632502800000;
+    const formattedDate = formatDateWithTimeZoneV3(startTime, endTime);
+    expect(formattedDate).toBe('12:00 AM - 01:00 AM CDT 2021-09-24');
   });
 });
 
-
-import { preparePayloadForReportDeliveryIssue } from './path-to-your-file';
-import { ReportDeliveryIssue, sparkDriverContext } from '../../types/spark-driver/trip.types';
-
-describe('preparePayloadForReportDeliveryIssue', () => {
-  it('should prepare payload for reporting delivery issue', () => {
-    const deliveryIssue = {
-      issueTypeOption: { issueType: 'Critical1', issueCriticality: 'critical' },
-      issueSubType: 'SubType1',
-      comments: 'Some comments',
-    };
-
-    const context = {
-      selectedDriver: { driverUserId: '123', firstName: 'John', lastName: 'Doe' },
-      selectedTask: { id: 'task1', orderId: 'order1', storeId: 'store1' },
-      selectedTrip: { tripId: 'trip1' },
-    };
-
-    const result = preparePayloadForReportDeliveryIssue(deliveryIssue, context);
-
-    expect(result).toEqual({
-      driverId: '123',
-      driverName: 'John Doe',
-      serviceProvider: 'Spark',
-      issueCriticality: 'critical',
-      issueType: 'Critical1',
-      issueSubType: 'SubType1',
-      deliveryTaskId: 'task1',
-      comments: 'Some comments',
-      orders: ['order1'],
-      storeId: Number('store1'),
-      tripId: 'trip1',
-    });
+// Test formatTaskEvents
+describe('formatTaskEvents', () => {
+  it('should return formatted task events with an "isLast" flag', () => {
+    const formattedEvents = formatTaskEvents([mockTaskEvent, mockTaskEvent]);
+    expect(formattedEvents[0].isLast).toBe(false);
+    expect(formattedEvents[1].isLast).toBe(true);
   });
 
-  it('should handle missing selectedTask and selectedTrip', () => {
-    const deliveryIssue = {
-      issueTypeOption: { issueType: 'Critical1', issueCriticality: 'critical' },
-      issueSubType: 'SubType1',
-      comments: 'Some comments',
-    };
-
-    const context = {
-      selectedDriver: { driverUserId: '123', firstName: 'John', lastName: 'Doe' },
-      selectedTask: null,
-      selectedTrip: null,
-    };
-
-    const result = preparePayloadForReportDeliveryIssue(deliveryIssue, context);
-
-    expect(result).toEqual({
-      driverId: '123',
-      driverName: 'John Doe',
-      serviceProvider: 'Spark',
-      issueCriticality: 'critical',
-      issueType: 'Critical1',
-      issueSubType: 'SubType1',
-      deliveryTaskId: undefined,
-      comments: 'Some comments',
-      orders: [undefined],
-      storeId: NaN,
-      tripId: undefined,
-    });
+  it('should return an empty array if taskEvents is an empty array', () => {
+    const formattedEvents = formatTaskEvents([]);
+    expect(formattedEvents).toEqual([]);
   });
 });
 
-
-import { shouldShowComments } from './path-to-your-file';
-import { IssueOption } from '../../types/spark-driver/select-delivery-issue.types';
-
-describe('shouldShowComments', () => {
-  it('should return true if issueDescRequired includes issueSubType', () => {
-    const issueTypeOption = {
-      issueCriticality: 'nonCritical',
-      issueDescRequired: ['SubType1'],
-    };
-
-    const result = shouldShowComments(issueTypeOption, 'SubType1');
-
-    expect(result).toBe(true);
+// Test transformAddress
+describe('transformAddress', () => {
+  it('should return a transformed address for store info', () => {
+    const address = { addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US' };
+    const result = transformAddress(address, true);
+    expect(result.finalAddress).toBe('123 Main St, Austin, TX, 73301');
   });
 
-  it('should return true if issueCriticality is critical', () => {
-    const issueTypeOption = {
-      issueCriticality: 'critical',
-      issueDescRequired: [],
-    };
+  it('should return a full address including country for customer info', () => {
+    const address = { addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US' };
+    const result = transformAddress(address, false);
+    expect(result.finalAddress).toBe('456 Elm St, Austin, TX, 73302, US');
+  });
+});
 
-    const result = shouldShowComments(issueTypeOption, 'SubType1');
-
-    expect(result).toBe(true);
+// Test transformInfo
+describe('transformInfo', () => {
+  it('should return the correct pickup and drop-off address details', () => {
+    const info = { addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US', storeName: 'Store A', customerFullName: 'John Doe' };
+    const result = transformInfo(info, true);
+    expect(result.finalAddress).toBe('123 Main St, Austin, TX, 73301');
+    expect(result.storeName).toBe('Store A');
   });
 
-  it('should return true if issueSubType is "Other"', () => {
-    const issueTypeOption = {
-      issueCriticality: 'nonCritical',
-      issueDescRequired: [],
-    };
+  it('should return the correct drop-off address details', () => {
+    const info = { addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US', storeName: 'Store B', customerFullName: 'Jane Doe' };
+    const result = transformInfo(info, false);
+    expect(result.finalAddress).toBe('456 Elm St, Austin, TX, 73302, US');
+    expect(result.storeName).toBe('Store B');
+  });
+});
 
-    const result = shouldShowComments(issueTypeOption, 'Other');
+// Test formatAndSetData
+describe('formatAndSetData', () => {
+  it('should call the appropriate setters for a delivery task', () => {
+    const setServiceType = jest.fn();
+    const setPickupInfo = jest.fn();
+    const setDropOffInfo = jest.fn();
+    const setOrderStatusData = jest.fn();
 
-    expect(result).toBe(true);
+    formatAndSetData(mockDeliveryTask, setServiceType, setPickupInfo, setDropOffInfo, setOrderStatusData);
+
+    expect(setServiceType).toHaveBeenCalledWith('DELIVERY');
+    expect(setPickupInfo).toHaveBeenCalledWith({ addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US' });
+    expect(setDropOffInfo).toHaveBeenCalledWith({ addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US' });
+    expect(setOrderStatusData).toHaveBeenCalledWith([{ eventId: 1, eventType: 'delivery', timestamp: 1632499200000, isLast: true }]);
+  });
+});
+
+// Test selectedOptions
+describe('selectedOptions', () => {
+  it('should return the correct options for a task', () => {
+    const result = selectedOptions(mockDeliveryTask);
+    expect(result.name).toBe('undefined - undefined');
+    expect(result.reasonCode).toBe(undefined);
+  });
+});
+
+// Test transformOptions
+describe('transformOptions', () => {
+  it('should transform a list of tasks into selected options', () => {
+    const result = transformOptions(mockTaskList);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('undefined - undefined');
   });
 
-  it('should return false if none of the conditions are met', () => {
-    const issueTypeOption = {
-      issueCriticality: 'nonCritical',
-      issueDescRequired: [],
-    };
-
-    const result = shouldShowComments(issueTypeOption, 'SubType2');
-
-    expect(result).toBe(false);
+  it('should transform a single task into selected options', () => {
+    const result = transformOptions(mockDeliveryTask);
+    expect(result.name).toBe('undefined - undefined');
   });
 });
