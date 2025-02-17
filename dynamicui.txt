@@ -1,5 +1,6 @@
-const getTimestampWithAddedHours = (hours) => {
-    const currentTimestamp = Date.now(); // Get the current timestamp in milliseconds
-    const additionalMilliseconds = hours * 60 * 60 * 1000; // Convert hours to milliseconds
-    return currentTimestamp + additionalMilliseconds; // Return the new timestamp
-}
+jest.mock("components/sc-ui-components", () => ({
+  ChevronDownIcon: () => <span>ChevronDownIcon</span>,
+  Checkbox: ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
+    <input type="checkbox" checked={checked} onChange={onChange} data-testid="checkbox" />
+  ),
+}));
