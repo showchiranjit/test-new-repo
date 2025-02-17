@@ -1,6 +1,106 @@
-jest.mock("components/sc-ui-components", () => ({
-  ChevronDownIcon: () => <span>ChevronDownIcon</span>,
-  Checkbox: ({ checked, onChange }: { checked: boolean; onChange: () => void }) => (
-    <input type="checkbox" checked={checked} onChange={onChange} data-testid="checkbox" />
-  ),
-}));
+import { extractMetadataForSDS } from './yourFile'; // replace with correct path
+import { ContextData } from 'context/state-types';
+import { ObjectRecord } from 'types/app.types';
+
+describe('extractMetadataForSDS', () => {
+  it('should return correct metadata when state is fully populated', () => {
+    const state: ContextData = {
+      sparkDriver: {
+        selectedDriver: { email: 'driver@example.com' },
+        selectedTrip: { tripId: '12345', displayTripId: 'Trip-12345' },
+        selectedTask: { orderId: 'order123', id: 'task123' },
+      },
+    };
+
+    const result: ObjectRecord = extractMetadataForSDS(state);
+
+    expect(result).toEqual({
+      driverId: 'driver@example.com',
+      trip: '12345',
+      displayTripId: 'Trip-12345',
+      order: 'order123',
+      task: 'task123',
+    });
+  });
+
+  it('should return null for missing selectedDriver', () => {
+    const state: ContextData = {
+      sparkDriver: {
+        selectedDriver: null,
+        selectedTrip: { tripId: '12345', displayTripId: 'Trip-12345' },
+        selectedTask: { orderId: 'order123', id: 'task123' },
+      },
+    };
+
+    const result: ObjectRecord = extractMetadataForSDS(state);
+
+    expect(result).toEqual({
+      driverId: null,
+      trip: '12345',
+      displayTripId: 'Trip-12345',
+      order: 'order123',
+      task: 'task123',
+    });
+  });
+
+  it('should return null for missing selectedTrip', () => {
+    const state: ContextData = {
+      sparkDriver: {
+        selectedDriver: { email: 'driver@example.com' },
+        selectedTrip: null,
+        selectedTask: { orderId: 'order123', id: 'task123' },
+      },
+    };
+
+    const result: ObjectRecord = extractMetadataForSDS(state);
+
+    expect(result).toEqual({
+      driverId: 'driver@example.com',
+      trip: null,
+      displayTripId: null,
+      order: 'order123',
+      task: 'task123',
+    });
+  });
+
+  it('should return null for missing selectedTask', () => {
+    const state: ContextData = {
+      sparkDriver: {
+        selectedDriver: { email: 'driver@example.com' },
+        selectedTrip: { tripId: '12345', displayTripId: 'Trip-12345' },
+        selectedTask: null,
+      },
+    };
+
+    const result: ObjectRecord = extractMetadataForSDS(state);
+
+    expect(result).toEqual({
+      driverId: 'driver@example.com',
+      trip: '12345',
+      displayTripId: 'Trip-12345',
+      order: null,
+      task: null,
+    });
+  });
+
+  it('should return null for all fields when state is missing all properties', () => {
+    const state: ContextData = {
+      sparkDriver: {
+        selectedDriver: null,
+        selectedTrip: null,
+        selectedTask: null,
+      },
+    };
+
+    const result: ObjectRecord = extractMetadataForSDS(state);
+
+    expect(result).toEqual({
+      driverId: null,
+      trip: null,
+      displayTripId: null,
+      order: null,
+      task: null,
+    });
+  });
+});
+
