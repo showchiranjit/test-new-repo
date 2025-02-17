@@ -1,158 +1,140 @@
-import { render, screen } from '@testing-library/react';
-import { getStoreCustomerAndCurrentStopLocation } from './path-to-your-file';
-import { Stop, PickupAndDeliveryLocation } from 'types/spark-driver/trip.types';
+import { formatDate } from "utils/moment-time-utils";
+import { OfferDetail, OfferSummary } from "types/spark-driver/offers.types";
+import { generateGrandTotal, generateOfferSummary, INITIAL_SUMMARY } from "./path-to-your-file";
 
-describe('getStoreCustomerAndCurrentStopLocation', () => {
-  it('should return the correct current stop, store location, and customer location', () => {
-    const stops: Stop[] = [
-      {
-        id: '1',
-        type: 'STORE',
-        status: 'ENROUTE',
-        activities: [
-          {
-            taskIds: [{ id: 'task1' }],
-          },
-        ],
-      },
-      {
-        id: '2',
-        type: 'CUSTOMER',
-        status: 'ARRIVED',
-        activities: [
-          {
-            taskIds: [{ id: 'task2' }],
-          },
-        ],
-      },
-      {
-        id: '3',
-        type: 'OTHER',
-        status: 'ENROUTE',
-        activities: [
-          {
-            taskIds: [{ id: 'task3' }],
-          },
-        ],
-      },
-    ];
-
-    const selectedTaskId = 'task1';
-
-    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
-
-    expect(result).toEqual({
-      currentStop: stops[0],
-      customerLocation: stops[1],
-      storeLocation: stops[0],
-    });
+describe("generateGrandTotal", () => {
+  it("should return the initial summary when the input is an empty array", () => {
+    const result = generateGrandTotal([]);
+    expect(result).toEqual(INITIAL_SUMMARY);
   });
 
-  it('should return undefined for current stop if no stop is ENROUTE or ARRIVED', () => {
-    const stops: Stop[] = [
-      {
-        id: '1',
-        type: 'STORE',
-        status: 'COMPLETED',
-        activities: [
-          {
-            taskIds: [{ id: 'task1' }],
-          },
-        ],
-      },
-      {
-        id: '2',
-        type: 'CUSTOMER',
-        status: 'COMPLETED',
-        activities: [
-          {
-            taskIds: [{ id: 'task2' }],
-          },
-        ],
-      },
+  it("should correctly sum up the totals from multiple OfferSummary objects", () => {
+    const offerSummaries: OfferSummary[] = [
+      { accepted: 1, expired: 2, rejected: 3, dropped: 4, total: 10 },
+      { accepted: 2, expired: 3, rejected: 4, dropped: 5, total: 14 },
     ];
 
-    const selectedTaskId = 'task1';
-
-    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
-
+    const result = generateGrandTotal(offerSummaries);
     expect(result).toEqual({
-      currentStop: undefined,
-      customerLocation: stops[1],
-      storeLocation: stops[0],
+      accepted: 3,
+      expired: 5,
+      rejected: 7,
+      dropped: 9,
+      total: 24,
     });
   });
+});
 
-  it('should return undefined for store and customer locations if no matching stops are found', () => {
-    const stops: Stop[] = [
+describe("generateOfferSummary", () => {
+  const mockOffers: OfferDetail[] = [
+    { date: "2023-10-01", status: "ACCEPTED" },
+    { date: "2023-10-01", status: "EXPIRED" },
+    { date: "2023-10-02", status: "REJECTED" },
+    { date: "2023-10-02", status: "DROPPED" },
+    { date: "2023-10-02", status: "ACCEPTED" },
+  ];
+
+  it("should return an empty array when no offers are provided", () => {
+    const result = generateOfferSummary();
+    expect(result).toEqual([{ label: "Total", ...INITIAL_SUMMARY }]);
+  });
+
+  it("should correctly group and count offers by date", () => {
+    const result = generateOfferSummary(mockOffers);
+
+    expect(result).toEqual([
       {
-        id: '1',
-        type: 'OTHER',
-        status: 'ENROUTE',
-        activities: [
-          {
-            taskIds: [{ id: 'task1' }],
-          },
-        ],
+        label: "2023-10-01",
+        accepted: 1,
+        expired: 1,
+        rejected: 0,
+        dropped: 0,
+        total: 2,
       },
+      {
+        label: "2023-10-02",
+        accepted: 1,
+        expired: 0,
+        rejected: 1,
+        dropped: 1,
+        total: 3,
+      },
+      {
+        label: "Total",
+        accepted: 2,
+        expired: 1,
+        rejected: 1,
+        dropped: 1,
+        total: 5,
+      },
+    ]);
+  });
+
+  it("should handle offers with unknown statuses", () => {
+    const offersWithUnknownStatus: OfferDetail[] = [
+      { date: "2023-10-01", status: "UNKNOWN" },
     ];
 
-    const selectedTaskId = 'task1';
+    const result = generateOfferSummary(offersWithUnknownStatus);
 
-    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
-
-    expect(result).toEqual({
-      currentStop: undefined,
-      customerLocation: undefined,
-      storeLocation: undefined,
-    });
+    expect(result).toEqual([
+      {
+        label: "2023-10-01",
+        accepted: 0,
+        expired: 0,
+        rejected: 0,
+        dropped: 0,
+        total: 1,
+      },
+      {
+        label: "Total",
+        accepted: 0,
+        expired: 0,
+        rejected: 0,
+        dropped: 0,
+        total: 1,
+      },
+    ]);
   });
 
-  it('should return undefined for all properties if no stops match the selected task ID', () => {
-    const stops: Stop[] = [
-      {
-        id: '1',
-        type: 'STORE',
-        status: 'ENROUTE',
-        activities: [
-          {
-            taskIds: [{ id: 'task2' }],
-          },
-        ],
-      },
-      {
-        id: '2',
-        type: 'CUSTOMER',
-        status: 'ARRIVED',
-        activities: [
-          {
-            taskIds: [{ id: 'task3' }],
-          },
-        ],
-      },
+  it("should handle offers with missing dates", () => {
+    const offersWithMissingDate: OfferDetail[] = [
+      { date: "", status: "ACCEPTED" },
     ];
 
-    const selectedTaskId = 'task1';
+    const result = generateOfferSummary(offersWithMissingDate);
 
-    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
-
-    expect(result).toEqual({
-      currentStop: undefined,
-      customerLocation: undefined,
-      storeLocation: undefined,
-    });
+    expect(result).toEqual([
+      {
+        label: "",
+        accepted: 1,
+        expired: 0,
+        rejected: 0,
+        dropped: 0,
+        total: 1,
+      },
+      {
+        label: "Total",
+        accepted: 1,
+        expired: 0,
+        rejected: 0,
+        dropped: 0,
+        total: 1,
+      },
+    ]);
   });
+});
 
-  it('should handle empty stops array', () => {
-    const stops: Stop[] = [];
-    const selectedTaskId = 'task1';
+// Mocking the formatDate function
+jest.mock("utils/moment-time-utils", () => ({
+  formatDate: jest.fn((date) => date), // Mock formatDate to return the date as is
+  DATE_FORMAT_V1: "YYYY-MM-DD",
+}));
 
-    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
-
-    expect(result).toEqual({
-      currentStop: undefined,
-      customerLocation: undefined,
-      storeLocation: undefined,
-    });
+describe("formatDate mock", () => {
+  it("should use the mocked formatDate function", () => {
+    const mockOffers: OfferDetail[] = [{ date: "2023-10-01", status: "ACCEPTED" }];
+    generateOfferSummary(mockOffers);
+    expect(formatDate).toHaveBeenCalledWith("2023-10-01", "YYYY-MM-DD");
   });
 });
