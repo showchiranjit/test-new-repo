@@ -1,179 +1,153 @@
-import { formatSelectedDriver } from './path-to-your-file';
+import { ContextData, CaseEvent } from "types/incident.types";
+import { SparkDriverContext } from "types/spark-driver/trip.types";
+import { getIncidentCategoryReason } from "utils/incident-utils";
+import {
+  MissingTripsNote,
+  ESCALATION_NOTE_CONFIG,
+  prepareSDSEscalationNote,
+  prepareSDSEscalationEvent,
+} from "./path-to-your-file";
 
-describe('formatSelectedDriver', () => {
-  it('should format a driver object with all fields', () => {
-    const driver = {
-      driverUUID: '123',
-      firstName: 'John',
-      lastName: 'Doe',
-      mobile: '1234567890',
-      email: 'john.doe@example.com',
+// Mock the getIncidentCategoryReason function
+jest.mock("utils/incident-utils", () => ({
+  getIncidentCategoryReason: jest.fn(() => ({
+    name: "Mocked Reason",
+    reasonCode: "MOCKED_REASON_CODE",
+  })),
+}));
+
+describe("MissingTripsNote", () => {
+  it("should return null if selectedIncentive is missing or selectedMissingIncentives is empty", () => {
+    const contextWithoutIncentive: SparkDriverContext = {
+      selectedIncentive: null,
+      selectedMissingIncentives: [],
     };
+    expect(MissingTripsNote(contextWithoutIncentive)).toBeNull();
 
-    const result = formatSelectedDriver(driver);
-
-    expect(result).toEqual({
-      driverUUID: '123',
-      firstName: 'John',
-      lastName: 'Doe',
-      mobile: '1234567890',
-      email: 'john.doe@example.com',
-    });
-  });
-
-  it('should format a driver object with missing fields', () => {
-    const driver = {
-      driverUUID: '123',
-      firstName: 'John',
+    const contextWithEmptyMissingIncentives: SparkDriverContext = {
+      selectedIncentive: { incentiveDisplayId: "INC123" },
+      selectedMissingIncentives: [],
     };
-
-    const result = formatSelectedDriver(driver);
-
-    expect(result).toEqual({
-      driverUUID: '123',
-      firstName: 'John',
-      lastName: '',
-      mobile: undefined,
-      email: undefined,
-    });
+    expect(MissingTripsNote(contextWithEmptyMissingIncentives)).toBeNull();
   });
 
-  it('should handle undefined driver', () => {
-    const result = formatSelectedDriver(undefined);
-
-    expect(result).toEqual({
-      driverUUID: '',
-      firstName: '',
-      lastName: '',
-      mobile: undefined,
-      email: undefined,
-    });
-  });
-
-  it('should handle null driver', () => {
-    const result = formatSelectedDriver(null);
-
-    expect(result).toEqual({
-      driverUUID: '',
-      firstName: '',
-      lastName: '',
-      mobile: undefined,
-      email: undefined,
-    });
+  it("should return a note with missing trip IDs and incentive ID", () => {
+    const context: SparkDriverContext = {
+      selectedIncentive: { incentiveDisplayId: "INC123" },
+      selectedMissingIncentives: [
+        { displayTripId: "TRIP1" },
+        { displayTripId: "TRIP2" },
+      ],
+    };
+    const expectedNote =
+      "Trips TRIP1, TRIP2 meet the criteria of the incentive INC123, however, are not marked as a qualifying trip on the driver's account. Needs review.";
+    expect(MissingTripsNote(context)).toBe(expectedNote);
   });
 });
 
-
-
-
-import { formatDriverDataToCustomer } from './path-to-your-file';
-import { CustomerContext } from 'types/customer.types';
-
-describe('formatDriverDataToCustomer', () => {
-  it('should format a driver object to customer context with all fields', () => {
-    const driver = {
-      driverUUID: '123',
-      firstName: 'John',
-      lastName: 'Doe',
-      mobile: '1234567890',
-      email: 'john.doe@example.com',
-      searchInput: 'John Doe',
-      isVerified: true,
+describe("ESCALATION_NOTE_CONFIG", () => {
+  it("should contain all expected keys and functions", () => {
+    const context: SparkDriverContext = {
+      selectedDriver: {
+        firstName: "John",
+        lastName: "Doe",
+        email: "john.doe@example.com",
+        mobile: "1234567890",
+      },
+      selectedTrip: { displayTripId: "TRIP123" },
+      selectedTask: {
+        orderId: "ORDER123",
+        storeInfo: { storeName: "Store 123" },
+        customerInfo: { customerFullName: "Customer Name" },
+      },
+      selectedIncentive: { incentiveDisplayId: "INC123" },
+      safetyIssue: { name: "Safety Issue Name" },
     };
 
-    const result = formatDriverDataToCustomer(driver);
+    expect(ESCALATION_NOTE_CONFIG["Driver name"](context)).toBe("John Doe");
+    expect(ESCALATION_NOTE_CONFIG["Driver email"](context)).toBe(
+      "john.doe@example.com"
+    );
+    expect(ESCALATION_NOTE_CONFIG["Driver phone number"](context)).toBe(
+      "1234567890"
+    );
+    expect(ESCALATION_NOTE_CONFIG["Driver Trip"](context)).toBe("TRIP123");
+    expect(ESCALATION_NOTE_CONFIG["Driver Order"](context)).toBe("ORDER123");
+    expect(ESCALATION_NOTE_CONFIG["Driver Store"](context)).toBe("Store 123");
+    expect(ESCALATION_NOTE_CONFIG["Incentive ID"](context)).toBe("INC123");
+    expect(ESCALATION_NOTE_CONFIG["Customer name from order"](context)).toBe(
+      "Customer Name"
+    );
+    expect(ESCALATION_NOTE_CONFIG["Safety Issue"](context)).toBe(
+      "Safety Issue Name"
+    );
+  });
+});
 
-    expect(result).toEqual({
-      id: '123',
-      firstName: 'John',
-      lastName: 'Doe',
-      phone: '1234567890',
-      phonePrefix: '',
-      email: 'john.doe@example.com',
-      searchInput: 'John Doe',
-      postalCode: '',
-      member: false,
-      memberSince: 0,
-      customerSince: 0,
-      isVerified: true,
-      customerType: '',
-      accountType: '',
-      updateState: false,
-      accountReason: '',
-    });
+describe("prepareSDSEscalationNote", () => {
+  it("should return an empty string if no values are provided", () => {
+    const context: SparkDriverContext = {};
+    const result = prepareSDSEscalationNote(context);
+    expect(result).toBe("");
   });
 
-  it('should format a driver object to customer context with missing fields', () => {
-    const driver = {
-      driverUUID: '123',
-      firstName: 'John',
+  it("should combine formConfig and ESCALATION_NOTE_CONFIG values", () => {
+    const context: SparkDriverContext = {
+      selectedDriver: { firstName: "John", lastName: "Doe" },
+      selectedIncentive: { incentiveDisplayId: "INC123" },
     };
-
-    const result = formatDriverDataToCustomer(driver);
-
-    expect(result).toEqual({
-      id: '123',
-      firstName: 'John',
-      lastName: '',
-      phone: undefined,
-      phonePrefix: '',
-      email: undefined,
-      searchInput: undefined,
-      postalCode: '',
-      member: false,
-      memberSince: 0,
-      customerSince: 0,
-      isVerified: undefined,
-      customerType: '',
-      accountType: '',
-      updateState: false,
-      accountReason: '',
-    });
+    const formConfig = { "Custom Field": "Custom Value" };
+    const result = prepareSDSEscalationNote(context, formConfig);
+    expect(result).toContain("Driver name: John Doe");
+    expect(result).toContain("Incentive ID: INC123");
+    expect(result).toContain("Custom Field: Custom Value");
   });
 
-  it('should handle undefined driver', () => {
-    const result = formatDriverDataToCustomer(undefined);
-
-    expect(result).toEqual({
-      id: '',
-      firstName: '',
-      lastName: '',
-      phone: undefined,
-      phonePrefix: '',
-      email: undefined,
-      searchInput: undefined,
-      postalCode: '',
-      member: false,
-      memberSince: 0,
-      customerSince: 0,
-      isVerified: undefined,
-      customerType: '',
-      accountType: '',
-      updateState: false,
-      accountReason: '',
-    });
+  it("should filter out null values", () => {
+    const context: SparkDriverContext = {
+      selectedDriver: { firstName: "John", lastName: "Doe" },
+      selectedIncentive: null, // This will make "Incentive ID" return null
+    };
+    const result = prepareSDSEscalationNote(context);
+    expect(result).toContain("Driver name: John Doe");
+    expect(result).not.toContain("Incentive ID:");
   });
+});
 
-  it('should handle null driver', () => {
-    const result = formatDriverDataToCustomer(null);
+describe("prepareSDSEscalationEvent", () => {
+  it("should create a CaseEvent with the correct structure", () => {
+    const state: ContextData = {
+      user: { userName: "agent123" },
+      incidentGCState: { categoryAction: "MOCKED_ACTION" },
+      sparkDriver: {
+        selectedTask: { id: "TASK123", orderId: "ORDER123" },
+        selectedTrip: { tripId: "TRIP123", displayTripId: "TRIP123" },
+        selectedIncentive: {
+          incentiveId: "INC123",
+          incentiveDisplayId: "INC123",
+        },
+      },
+    };
+    const eventNote = "Test note";
+    const result = prepareSDSEscalationEvent(state, eventNote);
 
     expect(result).toEqual({
-      id: '',
-      firstName: '',
-      lastName: '',
-      phone: undefined,
-      phonePrefix: '',
-      email: undefined,
-      searchInput: undefined,
-      postalCode: '',
-      member: false,
-      memberSince: 0,
-      customerSince: 0,
-      isVerified: undefined,
-      customerType: '',
-      accountType: '',
-      updateState: false,
-      accountReason: '',
+      agent: { userName: "agent123" },
+      entityDescription: "",
+      reason: "Mocked Reason",
+      action: "SDS_OFFLINE_ESCALATION",
+      noteText: eventNote,
+      createdDate: expect.any(String),
+      eventAttributes: {
+        reasonCode: "MOCKED_REASON_CODE",
+        reasonDesc: "Mocked Reason",
+        displayTripId: "TRIP123",
+        tripId: "TRIP123",
+        deliveryTaskId: "TASK123",
+        orderId: "ORDER123",
+        incentiveId: "INC123",
+        incentiveDisplayId: "INC123",
+      },
     });
   });
 });
