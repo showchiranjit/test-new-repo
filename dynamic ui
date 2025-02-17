@@ -1,98 +1,158 @@
 import { render, screen } from '@testing-library/react';
-import { getRelevantEvent, hasSDSAttributes, mapAssignments } from './path-to-your-file';
-import { Assignment, CaseEvent } from 'types/incident.types';
-import moment from 'moment';
+import { getStoreCustomerAndCurrentStopLocation } from './path-to-your-file';
+import { Stop, PickupAndDeliveryLocation } from 'types/spark-driver/trip.types';
 
-describe('getRelevantEvent', () => {
-  it('should return the first event with a reason or SDS attributes', () => {
-    const events: CaseEvent[] = [
-      { createdDate: '2023-10-01', reason: 'Reason 1', eventAttributes: {} },
-      { createdDate: '2023-10-02', reason: '', eventAttributes: { orderId: '123' } },
-      { createdDate: '2023-10-03', reason: 'Reason 2', eventAttributes: {} },
-    ];
-
-    const result = getRelevantEvent(events);
-    expect(result).toEqual(events[0]);
-  });
-
-  it('should return undefined if no events have a reason or SDS attributes', () => {
-    const events: CaseEvent[] = [
-      { createdDate: '2023-10-01', reason: '', eventAttributes: {} },
-      { createdDate: '2023-10-02', reason: '', eventAttributes: {} },
-    ];
-
-    const result = getRelevantEvent(events);
-    expect(result).toBeUndefined();
-  });
-});
-
-describe('hasSDSAttributes', () => {
-  it('should return true if event has orderId or trioId', () => {
-    const event: CaseEvent = { createdDate: '2023-10-01', reason: '', eventAttributes: { orderId: '123' } };
-    expect(hasSDSAttributes(event)).toBe(true);
-  });
-
-  it('should return false if event has no orderId or trioId', () => {
-    const event: CaseEvent = { createdDate: '2023-10-01', reason: '', eventAttributes: {} };
-    expect(hasSDSAttributes(event)).toBe(false);
-  });
-
-  it('should return false if event is undefined', () => {
-    expect(hasSDSAttributes(undefined)).toBe(false);
-  });
-});
-
-describe('mapAssignments', () => {
-  it('should map assignments with relevant events and reason', () => {
-    const assignments: Assignment[] = [
-      { assignedDate: '2023-10-01', agent: { userName: 'user1' } },
-      { assignedDate: '2023-10-03', agent: { userName: 'user2' } },
-    ];
-
-    const events: CaseEvent[] = [
-      { createdDate: '2023-10-02', reason: 'Reason 1', agent: { userName: 'user1' }, eventAttributes: {} },
-      { createdDate: '2023-10-04', reason: 'Reason 2', agent: { userName: 'user2' }, eventAttributes: {} },
-    ];
-
-    const result = mapAssignments(assignments, events);
-    expect(result).toEqual([
+describe('getStoreCustomerAndCurrentStopLocation', () => {
+  it('should return the correct current stop, store location, and customer location', () => {
+    const stops: Stop[] = [
       {
-        assignment: assignments[0],
-        events: [events[0]],
-        reason: 'Reason 1',
+        id: '1',
+        type: 'STORE',
+        status: 'ENROUTE',
+        activities: [
+          {
+            taskIds: [{ id: 'task1' }],
+          },
+        ],
       },
       {
-        assignment: assignments[1],
-        events: [events[1]],
-        reason: 'Reason 2',
+        id: '2',
+        type: 'CUSTOMER',
+        status: 'ARRIVED',
+        activities: [
+          {
+            taskIds: [{ id: 'task2' }],
+          },
+        ],
       },
-    ]);
-  });
-
-  it('should handle empty events array', () => {
-    const assignments: Assignment[] = [
-      { assignedDate: '2023-10-01', agent: { userName: 'user1' } },
-    ];
-
-    const events: CaseEvent[] = [];
-
-    const result = mapAssignments(assignments, events);
-    expect(result).toEqual([
       {
-        assignment: assignments[0],
-        events: [],
-        reason: '',
+        id: '3',
+        type: 'OTHER',
+        status: 'ENROUTE',
+        activities: [
+          {
+            taskIds: [{ id: 'task3' }],
+          },
+        ],
       },
-    ]);
-  });
-
-  it('should handle empty assignments array', () => {
-    const assignments: Assignment[] = [];
-    const events: CaseEvent[] = [
-      { createdDate: '2023-10-02', reason: 'Reason 1', agent: { userName: 'user1' }, eventAttributes: {} },
     ];
 
-    const result = mapAssignments(assignments, events);
-    expect(result).toEqual([]);
+    const selectedTaskId = 'task1';
+
+    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
+
+    expect(result).toEqual({
+      currentStop: stops[0],
+      customerLocation: stops[1],
+      storeLocation: stops[0],
+    });
+  });
+
+  it('should return undefined for current stop if no stop is ENROUTE or ARRIVED', () => {
+    const stops: Stop[] = [
+      {
+        id: '1',
+        type: 'STORE',
+        status: 'COMPLETED',
+        activities: [
+          {
+            taskIds: [{ id: 'task1' }],
+          },
+        ],
+      },
+      {
+        id: '2',
+        type: 'CUSTOMER',
+        status: 'COMPLETED',
+        activities: [
+          {
+            taskIds: [{ id: 'task2' }],
+          },
+        ],
+      },
+    ];
+
+    const selectedTaskId = 'task1';
+
+    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
+
+    expect(result).toEqual({
+      currentStop: undefined,
+      customerLocation: stops[1],
+      storeLocation: stops[0],
+    });
+  });
+
+  it('should return undefined for store and customer locations if no matching stops are found', () => {
+    const stops: Stop[] = [
+      {
+        id: '1',
+        type: 'OTHER',
+        status: 'ENROUTE',
+        activities: [
+          {
+            taskIds: [{ id: 'task1' }],
+          },
+        ],
+      },
+    ];
+
+    const selectedTaskId = 'task1';
+
+    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
+
+    expect(result).toEqual({
+      currentStop: undefined,
+      customerLocation: undefined,
+      storeLocation: undefined,
+    });
+  });
+
+  it('should return undefined for all properties if no stops match the selected task ID', () => {
+    const stops: Stop[] = [
+      {
+        id: '1',
+        type: 'STORE',
+        status: 'ENROUTE',
+        activities: [
+          {
+            taskIds: [{ id: 'task2' }],
+          },
+        ],
+      },
+      {
+        id: '2',
+        type: 'CUSTOMER',
+        status: 'ARRIVED',
+        activities: [
+          {
+            taskIds: [{ id: 'task3' }],
+          },
+        ],
+      },
+    ];
+
+    const selectedTaskId = 'task1';
+
+    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
+
+    expect(result).toEqual({
+      currentStop: undefined,
+      customerLocation: undefined,
+      storeLocation: undefined,
+    });
+  });
+
+  it('should handle empty stops array', () => {
+    const stops: Stop[] = [];
+    const selectedTaskId = 'task1';
+
+    const result = getStoreCustomerAndCurrentStopLocation(stops, selectedTaskId);
+
+    expect(result).toEqual({
+      currentStop: undefined,
+      customerLocation: undefined,
+      storeLocation: undefined,
+    });
   });
 });
