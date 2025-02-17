@@ -1,124 +1,188 @@
-import { 
-  formatDateWithTimeZoneV3, 
-  formatTaskEvents, 
-  transformAddress, 
-  transformInfo, 
-  formatAndSetData, 
-  selectedOptions, 
-  transformOptions 
-} from './yourModule';
-import moment from 'moment';
+import { formatDeliveryTimeRange } from 'path-to-your-file';
+import * as utils from 'utils/moment-time-utils';
 
-// Mock data
-const mockTaskEvent = { eventId: 1, eventType: 'delivery', timestamp: 1632499200000 };
-const mockDeliveryTask = {
-  serviceType: 'DELIVERY',
-  storeInfo: { addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US' },
-  taskEvents: [mockTaskEvent],
-  customerInfo: { addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US' },
-};
-const mockTaskList = [mockDeliveryTask];
+jest.mock('utils/moment-time-utils', () => ({
+  ...jest.requireActual('utils/moment-time-utils'),
+  getTimeZoneAbbr: jest.fn(),
+  getBrowserTimeZone: jest.fn(),
+  formatDate: jest.fn(),
+  formatHoursRange: jest.fn(),
+}));
 
-// Test formatDateWithTimeZoneV3
-describe('formatDateWithTimeZoneV3', () => {
-  it('should format the date with the correct timezone and time slot', () => {
-    const startTime = 1632499200000;
-    const endTime = 1632502800000;
-    const timezone = 'America/Chicago';
-    const formattedDate = formatDateWithTimeZoneV3(startTime, endTime, timezone);
-    expect(formattedDate).toBe('12:00 AM - 01:00 AM CDT 2021-09-24');
+describe('formatDeliveryTimeRange', () => {
+  it('should return the formatted time when start and end time are the same', () => {
+    const mockStart = '2025-02-17T08:00:00Z';
+    const mockEnd = '2025-02-17T08:30:00Z';
+    const mockTimezone = 'UTC';
+
+    // Mocking helper functions
+    (utils.getTimeZoneAbbr as jest.Mock).mockReturnValue('UTC');
+    (utils.formatDate as jest.Mock).mockReturnValue('08');
+    (utils.formatHoursRange as jest.Mock).mockReturnValue('08:00 - 08:30');
+
+    const result = formatDeliveryTimeRange(mockStart, mockEnd, mockTimezone);
+    expect(result).toBe('08:00 - 08:30');
   });
 
-  it('should use default values when no timezone or format is provided', () => {
-    const startTime = 1632499200000;
-    const endTime = 1632502800000;
-    const formattedDate = formatDateWithTimeZoneV3(startTime, endTime);
-    expect(formattedDate).toBe('12:00 AM - 01:00 AM CDT 2021-09-24');
-  });
-});
+  it('should return the formatted time range when start and end times differ', () => {
+    const mockStart = '2025-02-17T08:00:00Z';
+    const mockEnd = '2025-02-17T09:00:00Z';
+    const mockTimezone = 'UTC';
 
-// Test formatTaskEvents
-describe('formatTaskEvents', () => {
-  it('should return formatted task events with an "isLast" flag', () => {
-    const formattedEvents = formatTaskEvents([mockTaskEvent, mockTaskEvent]);
-    expect(formattedEvents[0].isLast).toBe(false);
-    expect(formattedEvents[1].isLast).toBe(true);
-  });
+    // Mocking helper functions
+    (utils.getTimeZoneAbbr as jest.Mock).mockReturnValue('UTC');
+    (utils.formatDate as jest.Mock).mockReturnValue('08');
+    (utils.formatHoursRange as jest.Mock).mockReturnValue('08:00 - 09:00');
 
-  it('should return an empty array if taskEvents is an empty array', () => {
-    const formattedEvents = formatTaskEvents([]);
-    expect(formattedEvents).toEqual([]);
+    const result = formatDeliveryTimeRange(mockStart, mockEnd, mockTimezone);
+    expect(result).toBe('08:00 - 09:00');
   });
 });
 
-// Test transformAddress
-describe('transformAddress', () => {
-  it('should return a transformed address for store info', () => {
-    const address = { addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US' };
-    const result = transformAddress(address, true);
-    expect(result.finalAddress).toBe('123 Main St, Austin, TX, 73301');
-  });
 
-  it('should return a full address including country for customer info', () => {
-    const address = { addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US' };
-    const result = transformAddress(address, false);
-    expect(result.finalAddress).toBe('456 Elm St, Austin, TX, 73302, US');
-  });
-});
 
-// Test transformInfo
-describe('transformInfo', () => {
-  it('should return the correct pickup and drop-off address details', () => {
-    const info = { addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US', storeName: 'Store A', customerFullName: 'John Doe' };
-    const result = transformInfo(info, true);
-    expect(result.finalAddress).toBe('123 Main St, Austin, TX, 73301');
-    expect(result.storeName).toBe('Store A');
-  });
 
-  it('should return the correct drop-off address details', () => {
-    const info = { addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US', storeName: 'Store B', customerFullName: 'Jane Doe' };
-    const result = transformInfo(info, false);
-    expect(result.finalAddress).toBe('456 Elm St, Austin, TX, 73302, US');
-    expect(result.storeName).toBe('Store B');
+import { sortTripsByStartDateTime } from 'path-to-your-file';
+import { Trip } from 'types/spark-driver/trip.types';
+
+describe('sortTripsByStartDateTime', () => {
+  it('should sort trips by start date time in descending order', () => {
+    const trips: Trip[] = [
+      { tripStartDateTime: '2025-02-17T08:00:00Z' },
+      { tripStartDateTime: '2025-02-16T08:00:00Z' },
+      { tripStartDateTime: '2025-02-18T08:00:00Z' },
+    ];
+
+    const sortedTrips = sortTripsByStartDateTime(trips);
+    expect(sortedTrips[0].tripStartDateTime).toBe('2025-02-18T08:00:00Z');
+    expect(sortedTrips[1].tripStartDateTime).toBe('2025-02-17T08:00:00Z');
+    expect(sortedTrips[2].tripStartDateTime).toBe('2025-02-16T08:00:00Z');
   });
 });
 
-// Test formatAndSetData
-describe('formatAndSetData', () => {
-  it('should call the appropriate setters for a delivery task', () => {
-    const setServiceType = jest.fn();
-    const setPickupInfo = jest.fn();
-    const setDropOffInfo = jest.fn();
-    const setOrderStatusData = jest.fn();
 
-    formatAndSetData(mockDeliveryTask, setServiceType, setPickupInfo, setDropOffInfo, setOrderStatusData);
+import { sortOrdersByCustomerStartTime } from 'path-to-your-file';
+import { DeliveryTask } from 'types/spark-driver/trip.types';
 
-    expect(setServiceType).toHaveBeenCalledWith('DELIVERY');
-    expect(setPickupInfo).toHaveBeenCalledWith({ addressLine1: '123 Main St', city: 'Austin', state: 'TX', postalCode: '73301', country: 'US' });
-    expect(setDropOffInfo).toHaveBeenCalledWith({ addressLine1: '456 Elm St', city: 'Austin', state: 'TX', postalCode: '73302', country: 'US' });
-    expect(setOrderStatusData).toHaveBeenCalledWith([{ eventId: 1, eventType: 'delivery', timestamp: 1632499200000, isLast: true }]);
+describe('sortOrdersByCustomerStartTime', () => {
+  it('should sort orders by customer start time in descending order', () => {
+    const orders: DeliveryTask[] = [
+      { customerStartTime: '2025-02-17T08:00:00Z' },
+      { customerStartTime: '2025-02-16T08:00:00Z' },
+      { customerStartTime: '2025-02-18T08:00:00Z' },
+    ];
+
+    const sortedOrders = sortOrdersByCustomerStartTime(orders);
+    expect(sortedOrders[0].customerStartTime).toBe('2025-02-18T08:00:00Z');
+    expect(sortedOrders[1].customerStartTime).toBe('2025-02-17T08:00:00Z');
+    expect(sortedOrders[2].customerStartTime).toBe('2025-02-16T08:00:00Z');
   });
 });
 
-// Test selectedOptions
-describe('selectedOptions', () => {
-  it('should return the correct options for a task', () => {
-    const result = selectedOptions(mockDeliveryTask);
-    expect(result.name).toBe('undefined - undefined');
-    expect(result.reasonCode).toBe(undefined);
+
+import { groupAndSortDeliveryTasks } from 'path-to-your-file';
+import { DeliveryTask } from 'types/spark-driver/trip.types';
+
+describe('groupAndSortDeliveryTasks', () => {
+  it('should group and sort tasks by storeId and serviceType', () => {
+    const tasks: DeliveryTask[] = [
+      { storeId: 1, serviceType: 'A' },
+      { storeId: 2, serviceType: 'B' },
+      { storeId: 1, serviceType: 'A' },
+    ];
+
+    const result = groupAndSortDeliveryTasks(tasks);
+    expect(result.groupedTasks['1A'].length).toBe(2);
+    expect(result.groupedTasks['2B'].length).toBe(1);
+    expect(result.sortingOrder).toEqual(['1A', '2B']);
   });
 });
 
-// Test transformOptions
-describe('transformOptions', () => {
-  it('should transform a list of tasks into selected options', () => {
-    const result = transformOptions(mockTaskList);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('undefined - undefined');
-  });
 
-  it('should transform a single task into selected options', () => {
-    const result = transformOptions(mockDeliveryTask);
-    expect(result.name).toBe('undefined - undefined');
+import { sortTripsAndGroupTasks } from 'path-to-your-file';
+import { Trip, DeliveryTask } from 'types/spark-driver/trip.types';
+
+describe('sortTripsAndGroupTasks', () => {
+  it('should sort trips and group tasks correctly', () => {
+    const trips: Trip[] = [
+      {
+        tripStartDateTime: '2025-02-17T08:00:00Z',
+        deliveryTasks: [
+          { storeId: 1, serviceType: 'A' },
+          { storeId: 2, serviceType: 'B' },
+        ],
+      },
+      {
+        tripStartDateTime: '2025-02-18T08:00:00Z',
+        deliveryTasks: [
+          { storeId: 1, serviceType: 'A' },
+          { storeId: 1, serviceType: 'B' },
+        ],
+      },
+    ];
+
+    const result = sortTripsAndGroupTasks(trips);
+    expect(result.length).toBe(2);
+    expect(result[0].tasksGroupedByStoreId['1A'].length).toBe(1);
   });
 });
+
+
+import { getTripTitleDate } from 'path-to-your-file';
+
+describe('getTripTitleDate', () => {
+  it('should return formatted date with timezone', () => {
+    const mockDate = '2025-02-17T08:00:00Z';
+    const result = getTripTitleDate(mockDate);
+    expect(result).toBe('2025-02-17'); // Depending on the format used in utils
+  });
+});
+
+
+
+
+import { getDeliveryType } from 'path-to-your-file';
+import { DeliveryTask } from 'types/spark-driver/trip.types';
+import { deliveryMapping } from 'constants/spark-driver/trip-constants';
+
+jest.mock('constants/spark-driver/trip-constants', () => ({
+  deliveryMapping: {
+    'type1': jest.fn(),
+    'type2': jest.fn(),
+  },
+}));
+
+describe('getDeliveryType', () => {
+  it('should return the correct delivery type', () => {
+    const order: DeliveryTask = { storeId: 1, serviceType: 'A' };
+    (deliveryMapping.type1 as jest.Mock).mockReturnValue(true);
+    const result = getDeliveryType(order);
+    expect(result).toBe('type1');
+  });
+
+  it('should return undefined if no match found', () => {
+    const order: DeliveryTask = { storeId: 1, serviceType: 'C' };
+    const result = getDeliveryType(order);
+    expect(result).toBeUndefined();
+  });
+});
+
+
+import { tripDisplayStatus, taskDisplayStatus } from 'path-to-your-file';
+
+describe('tripDisplayStatus', () => {
+  it('should return capitalized status', () => {
+    const trip = { uiTripStatusDisplayText: 'completed' };
+    const result = tripDisplayStatus(trip);
+    expect(result).toBe('Completed');
+  });
+});
+
+describe('taskDisplayStatus', () => {
+  it('should return capitalized status', () => {
+    const task = { statusDisplayTextLine1: 'in-progress' };
+    const result = taskDisplayStatus(task);
+    expect(result).toBe('In-progress');
+  });
+});
+
