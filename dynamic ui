@@ -1,88 +1,76 @@
-import { getAttachmentType } from './path-to-your-file';
-import { AttachmentType } from 'types/spark-driver/incident-attachments.types';
+import { getCriteriaType } from './path-to-your-file'; // Adjust the import path
+import { CriteriaType } from 'types/spark-driver/lookup-verify.types';
+import { validateEmail } from 'utils/validator-utils';
 
-describe('getAttachmentType', () => {
-  it('should return AttachmentType.PDF for PDF files', () => {
-    expect(getAttachmentType('file.pdf')).toBe(AttachmentType.PDF);
-  });
-
-  it('should return AttachmentType.IMAGE for PNG files', () => {
-    expect(getAttachmentType('file.png')).toBe(AttachmentType.IMAGE);
-  });
-
-  it('should return AttachmentType.IMAGE for JPEG files', () => {
-    expect(getAttachmentType('file.jpeg')).toBe(AttachmentType.IMAGE);
-  });
-
-  it('should return AttachmentType.IMAGE for JPG files', () => {
-    expect(getAttachmentType('file.jpg')).toBe(AttachmentType.IMAGE);
-  });
-
-  it('should return AttachmentType.IMAGE for TIF files', () => {
-    expect(getAttachmentType('file.tif')).toBe(AttachmentType.IMAGE);
-  });
-
-  it('should return AttachmentType.OTHER for unsupported file types', () => {
-    expect(getAttachmentType('file.unsupported')).toBe(AttachmentType.OTHER);
-  });
-
-  it('should return AttachmentType.OTHER for URLs without file extensions', () => {
-    expect(getAttachmentType('file')).toBe(AttachmentType.OTHER);
-  });
-});
-
-
-import { fetchAndDownloadFile } from './path-to-your-file';
-
-// Mocking fetch and URL.createObjectURL
-global.fetch = jest.fn(() =>
-  Promise.resolve({
-    ok: true,
-    blob: () => Promise.resolve(new Blob(['test'], { type: 'application/pdf' })),
-  })
-);
-
-global.URL.createObjectURL = jest.fn(() => 'mock-url');
-global.URL.revokeObjectURL = jest.fn();
-
-// Mocking document.createElement and related methods
-document.createElement = jest.fn(() => ({
-  href: '',
-  download: '',
-  click: jest.fn(),
+// Mock the validateEmail function
+jest.mock('utils/validator-utils', () => ({
+  validateEmail: jest.fn(),
 }));
 
-document.body.appendChild = jest.fn();
-document.body.removeChild = jest.fn();
-
-describe('fetchAndDownloadFile', () => {
+describe('getCriteriaType', () => {
   beforeEach(() => {
+    // Reset the mock implementation before each test
     jest.clearAllMocks();
   });
 
-  it('should download the file successfully', async () => {
-    await fetchAndDownloadFile('http://example.com/file.pdf', 'file.pdf');
+  it('should return CriteriaType.PHONE for valid phone numbers', () => {
+    const phoneNumbers = [
+      '2025550123',       // Valid 10-digit phone number
+      '(202)555-0123',   // Valid with parentheses and hyphen
+      '202.555.0123',     // Valid with dots
+      '202-555-0123',     // Valid with hyphens
+    ];
 
-    expect(fetch).toHaveBeenCalledWith('http://example.com/file.pdf');
-    expect(document.createElement).toHaveBeenCalledWith('a');
-    expect(document.body.appendChild).toHaveBeenCalled();
-    expect(document.body.removeChild).toHaveBeenCalled();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('mock-url');
+    phoneNumbers.forEach((phone) => {
+      expect(getCriteriaType(phone)).toBe(CriteriaType.PHONE);
+    });
   });
 
-  it('should handle fetch errors', async () => {
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        ok: false,
-        statusText: 'Not Found',
-      })
-    );
+  it('should return CriteriaType.EMAIL for valid email addresses', () => {
+    // Mock validateEmail to return true for valid emails
+    (validateEmail as jest.Mock).mockReturnValue(true);
 
-    console.error = jest.fn();
+    const emails = [
+      'test@example.com',
+      'user.name+tag+sorting@example.com',
+      'user@sub.example.com',
+    ];
 
-    await fetchAndDownloadFile('http://example.com/file.pdf', 'file.pdf');
+    emails.forEach((email) => {
+      expect(getCriteriaType(email)).toBe(CriteriaType.EMAIL);
+      expect(validateEmail).toHaveBeenCalledWith(email); // Ensure validateEmail is called
+    });
+  });
 
-    expect(fetch).toHaveBeenCalledWith('http://example.com/file.pdf');
-    expect(console.error).toHaveBeenCalledWith(new Error('Failed to fetch file.pdf: Not Found'));
+  it('should return CriteriaType.NAME for invalid phone numbers and emails', () => {
+    // Mock validateEmail to return false for invalid emails
+    (validateEmail as jest.Mock).mockReturnValue(false);
+
+    const invalidInputs = [
+      '12345',            // Invalid phone number
+      'invalid-email',    // Invalid email
+      'John Doe',         // Name
+      '123-45-6789',     // Invalid phone number format
+    ];
+
+    invalidInputs.forEach((input) => {
+      expect(getCriteriaType(input)).toBe(CriteriaType.NAME);
+    });
+  });
+
+  it('should return CriteriaType.NAME when validateEmail returns false for email-like strings', () => {
+    // Mock validateEmail to return false for email-like strings
+    (validateEmail as jest.Mock).mockReturnValue(false);
+
+    const emailLikeStrings = [
+      'test@example',     // Missing top-level domain
+      'user@.com',        // Missing domain name
+      '@example.com',     // Missing local part
+    ];
+
+    emailLikeStrings.forEach((input) => {
+      expect(getCriteriaType(input)).toBe(CriteriaType.NAME);
+      expect(validateEmail).toHaveBeenCalledWith(input); // Ensure validateEmail is called
+    });
   });
 });
